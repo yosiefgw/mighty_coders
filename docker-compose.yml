@@ -1,0 +1,16 @@
+services:
+  mariadb:
+    image: mariadb:11.8          # VECTOR type needs 11.7+; 11.8 is the LTS release
+    container_name: mighty_coders_vector_db
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-rootpassword}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-mighty_coders}
+      MARIADB_USER: ${MARIADB_USER:-mcuser}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-mcpassword}
+    ports:
+      - "${DB_PORT:-3308}:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./sql/init:/docker-entrypoint-initdb.d:ro   # runs *.sql in alphabetical order on FIRST start only
+volumes:
+  mariadb_data:
