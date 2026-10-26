@@ -139,13 +139,14 @@ def test_explain_exact_mode_does_not_use_vector_index(data):
 
 # ---------- the docs' "hard cap" warning, measured ----------
 
-def test_index_with_strict_filter_still_returns_k_rows(data):
+def test_index_with_strict_filter_has_no_hard_cap(data):
     """MariaDB docs (Vector Overview) warn that the LIMIT is a hard cap applied BEFORE a WHERE
-    filter, so a filtered query could return fewer than k rows. On 11.8.9 we measured the
-    opposite: the index search continues until k rows pass the filter.
-    Here 300 extra "near" chunks are nearer than the 3 "far" ones; we force the index and use the
-    smallest search effort. If this test FAILS, MariaDB now caps before the filter: update
-    search.py (its docstring and the query)."""
+    filter. Here 300 extra "near" chunks are nearer than the 3 "far" ones and fail the filter.
+    With a hard cap at k=3 the index would return only "near" chunks and the result would be EMPTY.
+    On 11.8.9 the index search continues past the LIMIT, so we get "far" rows.
+    We do NOT require all 3: the index is approximate, and with ef_search=1 we once got only 2 of 3
+    (the result can depend on the index state left by earlier tests). Exact mode always gets all 3.
+    If this test FAILS with an empty result, MariaDB now caps before the filter: update search.py."""
     cur = data.cursor()
     for j in range(300):
         v = list(QUERY)
@@ -153,9 +154,15 @@ def test_index_with_strict_filter_still_returns_k_rows(data):
         add_article(cur, TEST_ID + 100 + j, 5000, "2025-06-01", "zz_test_near", v)
     sql, params = build_query(QUERY, k=3, category="zz_test_far", mode="index")
     assert INDEX_NAME in explain_keys(data, sql, params)
-    rows = search(data, QUERY, k=3, category="zz_test_far", mode="index", ef_search=1)
-    assert ids(rows) == FAR
+
+    approx = ids(search(data, QUERY, k=3, category="zz_test_far", mode="index", ef_search=1))
     cur.execute("SET SESSION mhnsw_ef_search = DEFAULT")
+    assert len(approx) >= 1                       # no hard cap: past the 300 nearer chunks
+    assert set(approx) <= set(FAR)                # only rows that pass the filter
+    assert approx == sorted(approx, key=FAR.index)  # nearest first
+
+    exact = ids(search(data, QUERY, k=3, category="zz_test_far", mode="exact"))
+    assert exact == FAR                           # exact mode: always all 3
 
 
 def test_ef_search_is_set(data):

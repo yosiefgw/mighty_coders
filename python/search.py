@@ -13,12 +13,16 @@ Three modes:
                Used as the "ground truth" when we measure index recall.
 
 Filters and the LIMIT. The docs (page "Vector Overview") warn that the LIMIT is a hard cap applied
-BEFORE a WHERE filter, so a filtered query could return fewer than k rows. Our measurement on
-MariaDB 11.8.9 (3-300 non-matching chunks nearer than the 3 matching ones, mhnsw_ef_search
-1 and 20, with FORCE INDEX) always returned all 3 matching rows: the index search
-continues until k rows pass the filter. tests/test_search.py checks this
-(test_index_with_strict_filter_still_returns_k_rows). We therefore do NOT use a subquery with a
-bigger inner LIMIT: that would itself be a hard cap.
+BEFORE a WHERE filter, so a filtered query could return fewer than k rows. What we measured on
+MariaDB 11.8.9 (300 non-matching chunks nearer than the 3 matching ones, FORCE INDEX):
+  * There is NO hard cap at k: the index search continues past the LIMIT. With a hard cap the
+    result would be empty (all 300 nearer chunks fail the filter); we always got matching rows.
+  * But the search is still approximate: with a strict filter and the lowest search effort
+    (mhnsw_ef_search = 1) it usually returned all 3 matching rows, and once only 2.
+tests/test_search.py checks the first point (test_index_with_strict_filter_has_no_hard_cap).
+Consequences: we do NOT use a subquery with a bigger inner LIMIT (that would itself be a hard
+cap). When every matching row matters (strict filter, ground truth), use mode="exact" or a higher
+ef_search. In mode="auto" the optimizer often skips the index for strict filters anyway.
 Measured only on small synthetic data so far; to be re-checked on the real corpus.
 
 Docs: https://mariadb.com/docs/server/reference/sql-structure/vectors/vector-overview
