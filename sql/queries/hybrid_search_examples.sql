@@ -18,10 +18,13 @@
 --   (b) Filters go in the SAME statement (WHERE ... ORDER BY distance LIMIT k).
 --       The docs warn that the LIMIT is a hard cap applied before the WHERE filter, so rows could be
 --       "silently dropped". We measured MariaDB 11.8.9 (300 non-matching chunks nearer than the 3
---       matching ones, FORCE INDEX, mhnsw_ef_search = 1): all 3 matching rows came back. The index
---       search continues until k rows pass the filter. tests/test_search.py checks this
---       (test_index_with_strict_filter_still_returns_k_rows). So we do NOT use a subquery with a
---       bigger inner LIMIT: that inner LIMIT would itself be a hard cap.
+--       matching ones, FORCE INDEX, mhnsw_ef_search = 1): there is NO hard cap at k, the index
+--       search continues past the LIMIT (a hard cap would return nothing here). But the search is
+--       approximate: usually all 3 matching rows came back, once only 2. tests/test_search.py
+--       checks the "no hard cap" part (test_index_with_strict_filter_has_no_hard_cap).
+--       So we do NOT use a subquery with a bigger inner LIMIT: that inner LIMIT would itself be a
+--       hard cap. When every matching row matters, use IGNORE INDEX (exact, section 10) or a
+--       higher mhnsw_ef_search.
 --   (c) The optimizer decides whether to use the index. With a strict filter (few matching
 --       articles) it may skip the index and compute exact distances for the few filtered chunks.
 --       Check with EXPLAIN (section 9).
