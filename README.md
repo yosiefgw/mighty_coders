@@ -1,18 +1,25 @@
-# mighty_coders: Vector search and RAG, natively in MariaDB
+Project 4: [Vector search and RAG, natively](https://mariadb.org/bachelor_hackathon_2026-09/)
 
-Capstone I (Constructor University) with the MariaDB Foundation. Team: Yosief Gebrewahid Kidane, Timofey Stukalin, Dinu Panackal Devassia.
+# mighty_coders
 
-> Status: skeleton. Replace every TODO before submitting.
+Retrieval over Wikipedia with MariaDB's native VECTOR type.
+Capstone I, Constructor University, with the MariaDB Foundation.
 
-## What this project shows
-TODO: one paragraph. Native `VECTOR` type and vector index, similarity search combined with ordinary SQL filters, retrieval for RAG, compared with doing it outside the database.
+## What this is
+TODO
+
+## What we found
+TODO
 
 ## Versions and setup
 - MariaDB: 11.8 (Docker image `mariadb:11.8`). VECTOR needs 11.7 or newer.
 - Python 3 with `pymysql` and `pytest`.
 - Dataset: TODO, see [data/README.md](data/README.md).
 
-## Run it
+## Data model
+TODO
+
+## How to run it
 ```bash
 cp .env.example .env
 python3 -m venv .venv && source .venv/bin/activate
@@ -20,16 +27,20 @@ pip install -r requirements.txt
 docker compose down -v && docker compose up -d     # -v gives a clean start; init scripts only run on first start
 pytest -q
 ```
+TODO: ingest and query commands
 
 ## Layout
-- `sql/init/` numbered SQL files run in order on first start (`01_...sql`, `02_...sql`)
-- `python/` before/after demos per feature, plus `db.py`
-- `tests/` pytest tests
-- `data/` dataset instructions (large files are not committed)
-- `CONTRIBUTING.md`
+- `sql/init/`: numbered SQL files, run in order on first start (`01_...sql`, `02_...sql`)
+- `python/`: ingest, search, evaluation and query tool, plus `db.py`
+- `tests/`: pytest tests
+- `data/`: dataset instructions (large files are not committed)
+- `docs/`: charts and screenshots for this README
+- `CONTRIBUTING.md`: how we work (branches, pull requests, reviews)
 
-## Results: before and after
-TODO: comparison against the same task without the native feature (for example brute-force similarity in Python or another database). Show numbers, how many repeats, and the machine/setup.
+## How it was made
+TODO
 
-## Limits
-TODO: be explicit about what does not work or was not measured.
+## Team
+- Yosief Gebrewahid Kidane ([@yosiefgw](https://github.com/yosiefgw))
+- Timofey Stukalin ([@tstukalin1](https://github.com/tstukalin1))
+- Dinu Panackal Devassia ([@DinuPD](https://github.com/DinuPD))
