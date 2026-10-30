@@ -15,9 +15,9 @@ def populated_database():
         pytest.skip(f"MariaDB is not available: {exc}")
 
     try:
-        ids, vectors = load_embeddings(conn)
-
-        if len(ids) == 0:
+        try:
+            ids, vectors = load_embeddings(conn)
+        except RuntimeError:
             pytest.skip("Waiting for the real dataset to be loaded")
 
         yield conn, ids, vectors
