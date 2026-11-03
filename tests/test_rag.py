@@ -11,9 +11,11 @@ import os
 
 import pytest
 
+from unittest.mock import MagicMock, patch
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 from embed import EMBEDDING_DIM, embed, embed_batch  # noqa: E402
-from rag import _retrieve                            # noqa: E402
+from rag import _build_prompt, _retrieve, answer     # noqa: E402
 
 # Fake Wikipedia page id far from real ones so it never collides.
 TEST_ARTICLE_ID = 4_294_960_001
@@ -125,3 +127,111 @@ def test_retrieve_distance_is_float(conn):
     results = _retrieve(query_vec, top_k=5, conn=conn)
 
     assert all(isinstance(r["distance"], float) for r in results)
+
+
+# ---------------------------------------------------------------------------
+# _build_prompt
+# ---------------------------------------------------------------------------
+
+def test_build_prompt_contains_question():
+    chunks = [{"article_title": "Jupiter", "chunk_text": "Jupiter is a gas giant."}]
+    prompt = _build_prompt("What is Jupiter?", chunks)
+    assert "What is Jupiter?" in prompt
+
+
+def test_build_prompt_contains_chunk_text():
+    chunks = [{"article_title": "Jupiter", "chunk_text": "Jupiter is a gas giant."}]
+    prompt = _build_prompt("What is Jupiter?", chunks)
+    assert "Jupiter is a gas giant." in prompt
+
+
+def test_build_prompt_numbers_sources():
+    chunks = [
+        {"article_title": "Jupiter", "chunk_text": "Gas giant."},
+        {"article_title": "Saturn", "chunk_text": "Ringed planet."},
+    ]
+    prompt = _build_prompt("Planets?", chunks)
+    assert "[1]" in prompt
+    assert "[2]" in prompt
+
+
+# ---------------------------------------------------------------------------
+# answer  (mocked Anthropic client — no real API call)
+# ---------------------------------------------------------------------------
+
+def _make_fake_chunks(conn):
+    """Insert test data and return matching chunks for the mock."""
+    query_vec = embed("What is Jupiter made of?")
+    _insert_test_data(conn, query_vec)
+    return _retrieve(query_vec, top_k=1, conn=conn)
+
+
+def _mock_anthropic_client(reply: str):
+    """Return a mock anthropic.Anthropic() that returns *reply*."""
+    fake_content = MagicMock()
+    fake_content.text = reply
+    fake_message = MagicMock()
+    fake_message.content = [fake_content]
+    fake_client = MagicMock()
+    fake_client.messages.create.return_value = fake_message
+    return fake_client
+
+
+def test_answer_returns_expected_keys(conn):
+    _insert_test_data(conn, embed("What is Jupiter made of?"))
+    fake_client = _mock_anthropic_client("Jupiter is mostly hydrogen.")
+
+    with patch("rag.anthropic.Anthropic", return_value=fake_client), \
+         patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+        result = answer("What is Jupiter made of?", top_k=1, conn=conn)
+
+    assert set(result.keys()) == {"answer", "sources", "chunks"}
+
+
+def test_answer_string_and_list_types(conn):
+    _insert_test_data(conn, embed("What is Jupiter made of?"))
+    fake_client = _mock_anthropic_client("Jupiter is mostly hydrogen.")
+
+    with patch("rag.anthropic.Anthropic", return_value=fake_client), \
+         patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+        result = answer("What is Jupiter made of?", top_k=1, conn=conn)
+
+    assert isinstance(result["answer"], str)
+    assert isinstance(result["sources"], list)
+    assert isinstance(result["chunks"], list)
+
+
+def test_answer_sources_deduplicated(conn):
+    """Two chunks from the same article should produce only one source entry."""
+    vec = embed("What is Jupiter made of?")
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO articles (id, revision_id, title, url, word_count, last_edited) "
+        "VALUES (%s, 1, %s, %s, 500, '2025-01-01 00:00:00')",
+        (TEST_ARTICLE_ID, "zz_rag_test_article", "https://example.org/rag_test"),
+    )
+    for idx in range(2):
+        cur.execute(
+            "INSERT INTO chunks (article_id, chunk_index, word_count, chunk_text, embedding) "
+            "VALUES (%s, %s, 180, %s, VEC_FromText(%s))",
+            (TEST_ARTICLE_ID, idx, "Some chunk text.", json.dumps(vec)),
+        )
+    fake_client = _mock_anthropic_client("Answer.")
+
+    with patch("rag.anthropic.Anthropic", return_value=fake_client), \
+         patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+        result = answer("What is Jupiter made of?", top_k=5, conn=conn)
+
+    assert result["sources"].count("zz_rag_test_article") == 1
+
+
+def test_answer_uses_llm_reply(conn):
+    _insert_test_data(conn, embed("What is Jupiter made of?"))
+    expected_reply = "Jupiter is composed of hydrogen and helium."
+    fake_client = _mock_anthropic_client(expected_reply)
+
+    with patch("rag.anthropic.Anthropic", return_value=fake_client), \
+         patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+        result = answer("What is Jupiter made of?", top_k=1, conn=conn)
+
+    assert result["answer"] == expected_reply

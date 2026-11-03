@@ -3,3 +3,4 @@ pytest
 matplotlib
 numpy
 sentence-transformers
+anthropic
