@@ -2,3 +2,4 @@ pymysql
 pytest
 matplotlib
 numpy
+sentence-transformers
