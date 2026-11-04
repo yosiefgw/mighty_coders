@@ -17,7 +17,6 @@ Requires ANTHROPIC_API_KEY in the environment (copy .env.example → .env).
 """
 from __future__ import annotations
 
-import json
 import os
 from typing import List
 
@@ -25,60 +24,51 @@ import anthropic
 
 from db import get_connection
 from embed import embed
+from search import search
 
 DEFAULT_TOP_K = 5
 LLM_MODEL = "claude-haiku-4-5-20251001"
 MAX_TOKENS = 512
 
 
-def _retrieve(query_vec: List[float], top_k: int, conn=None) -> List[dict]:
-    """Return the *top_k* closest chunks from MariaDB using VEC_DISTANCE_COSINE().
+def _retrieve(query_vec: List[float], top_k: int, conn=None, **kwargs) -> List[dict]:
+    """Return the *top_k* closest chunks using search() from search.py.
 
-    Uses VEC_FromText() with a JSON array string — the same format that load.py
-    uses for insertion — so the HNSW vector index (DISTANCE=cosine) is used.
+    Uses the hybrid search function so callers can pass optional filters such as
+    ``category``, ``min_words``, ``edited_since``, and ``linked_from``.
 
     Pass *conn* explicitly in tests to reuse the test transaction (and have it
     rolled back automatically). When *conn* is None a new connection is opened
     and closed after the query.
     """
-    vec_json = json.dumps(query_vec)
-    sql = """
-        SELECT
-            a.title,
-            c.chunk_index,
-            c.chunk_text,
-            VEC_DISTANCE_COSINE(c.embedding, VEC_FromText(%s)) AS distance
-        FROM chunks c
-        JOIN articles a ON a.id = c.article_id
-        ORDER BY distance ASC
-        LIMIT %s
-    """
     own_conn = conn is None
     if own_conn:
         conn = get_connection()
     try:
-        with conn.cursor() as cur:
-            cur.execute(sql, (vec_json, top_k))
-            rows = cur.fetchall()
+        rows = search(conn, query_vec, k=top_k, **kwargs)
     finally:
         if own_conn:
             conn.close()
 
     return [
         {
-            "article_title": r[0],
-            "chunk_index": r[1],
-            "chunk_text": r[2],
-            "distance": float(r[3]),
+            "article_title": r["title"],
+            "chunk_index": r["chunk_index"],
+            "chunk_text": r["chunk_text"],
+            "distance": float(r["distance"]),
         }
         for r in rows
     ]
 
 
-def retrieve(question: str, top_k: int = DEFAULT_TOP_K) -> List[dict]:
-    """Embed *question* and return the *top_k* nearest chunks from the DB."""
+def retrieve(question: str, top_k: int = DEFAULT_TOP_K, **kwargs) -> List[dict]:
+    """Embed *question* and return the *top_k* nearest chunks from the DB.
+
+    Optional keyword filters (category, min_words, edited_since, linked_from)
+    are forwarded to search() for hybrid search.
+    """
     query_vec = embed(question)
-    return _retrieve(query_vec, top_k)
+    return _retrieve(query_vec, top_k, **kwargs)
 
 
 def _build_prompt(question: str, chunks: List[dict]) -> str:
@@ -98,7 +88,7 @@ def _build_prompt(question: str, chunks: List[dict]) -> str:
     )
 
 
-def answer(question: str, top_k: int = DEFAULT_TOP_K, conn=None) -> dict:
+def answer(question: str, top_k: int = DEFAULT_TOP_K, conn=None, **kwargs) -> dict:
     """Full RAG: retrieve relevant chunks, then generate an LLM answer.
 
     Returns a dict with:
@@ -107,7 +97,7 @@ def answer(question: str, top_k: int = DEFAULT_TOP_K, conn=None) -> dict:
       "chunks"  – the raw list of dicts from _retrieve()
     """
     query_vec = embed(question)
-    chunks = _retrieve(query_vec, top_k, conn=conn)
+    chunks = _retrieve(query_vec, top_k, conn=conn, **kwargs)
 
     prompt = _build_prompt(question, chunks)
 

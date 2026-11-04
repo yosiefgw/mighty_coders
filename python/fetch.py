@@ -61,6 +61,7 @@ def _category_members(category: str, cm_type: str) -> Iterator[dict]:
         "list": "categorymembers",
         "cmtitle": f"Category:{category}",
         "cmtype": cm_type,
+        "cmnamespace": "0",
         "cmlimit": "500",
         "cmprop": "title",
     }
@@ -96,15 +97,19 @@ def collect_titles(category: str, depth: int) -> list[str]:
 # Article fetching
 # ---------------------------------------------------------------------------
 
-def _fetch_batch(titles: list[str]) -> list[dict]:
-    """Fetch revisions, plain-text extract, categories, and links for up to 50 titles."""
-    data = _get({
+def _fetch_one(title: str) -> dict | None:
+    """Fetch one article: revision, full plain-text extract, categories, and links.
+
+    Fetches a single title per request (TextExtracts returns only one full extract
+    per multi-title request). Follows ``continue`` tokens to paginate through all
+    links and categories. Raises RuntimeError if the API returns an error object.
+    """
+    params = {
         "action": "query",
-        "titles": "|".join(titles),
+        "titles": title,
         "prop": "revisions|extracts|categories|links",
-        # revisions: latest id + timestamp
+        # revisions: latest id + timestamp (rvlimit not set — only valid for a single page)
         "rvprop": "ids|timestamp",
-        "rvlimit": "1",
         # plain text, no section markers
         "explaintext": "true",
         "exsectionformat": "plain",
@@ -115,38 +120,63 @@ def _fetch_batch(titles: list[str]) -> list[dict]:
         "pllimit": "max",
         "plnamespace": "0",
         "redirects": "true",   # resolve redirects automatically
-    })
+    }
 
+    page_data: dict | None = None
+    cats: list[str] = []
+    links: list[str] = []
+
+    while True:
+        data = _get(params)
+        if "error" in data:
+            raise RuntimeError(f"MediaWiki API error: {data['error']}")
+
+        pages = data.get("query", {}).get("pages", [])
+        if not pages:
+            break
+
+        page = pages[0]
+        if page.get("missing"):
+            return None
+
+        if page_data is None:
+            page_data = page  # first call: capture revisions + extract
+
+        # Accumulate paginated categories and links across continuation calls
+        cats.extend(c["title"].removeprefix("Category:") for c in page.get("categories", []))
+        links.extend(lk["title"] for lk in page.get("links", []))
+
+        cont = data.get("continue")
+        if not cont:
+            break
+        params = {**params, **{k: v for k, v in cont.items()}}
+
+    if page_data is None or not page_data.get("extract", "").strip():
+        return None
+
+    rev = (page_data.get("revisions") or [{}])[0]
+    text = page_data["extract"].strip()
+
+    return {
+        "id": page_data["pageid"],
+        "revision_id": rev.get("revid", 0),
+        "title": page_data["title"],
+        "url": f"https://en.wikipedia.org/wiki/{page_data['title'].replace(' ', '_')}",
+        "word_count": len(text.split()),
+        "last_edited": rev.get("timestamp", "1970-01-01T00:00:00Z"),
+        "categories": cats,
+        "links_to": links,
+        "text": text,  # kept only during processing; not written to articles.jsonl
+    }
+
+
+def _fetch_batch(titles: list[str]) -> list[dict]:
+    """Fetch revisions, plain-text extract, categories, and links for each title."""
     articles = []
-    pages = data.get("query", {}).get("pages", [])
-    for page in pages:
-        # Skip missing/special pages
-        if page.get("missing") or not page.get("extract", "").strip():
-            continue
-
-        rev = (page.get("revisions") or [{}])[0]
-        revision_id = rev.get("revid", 0)
-        last_edited = rev.get("timestamp", "1970-01-01T00:00:00Z")
-
-        cats = [c["title"].removeprefix("Category:") for c in page.get("categories", [])]
-
-        # Wikipedia link titles use spaces (not underscores); the API already returns them that way.
-        links = [lk["title"] for lk in page.get("links", [])]
-
-        text = page["extract"].strip()
-        word_count = len(text.split())
-
-        articles.append({
-            "id": page["pageid"],
-            "revision_id": revision_id,
-            "title": page["title"],
-            "url": f"https://en.wikipedia.org/wiki/{page['title'].replace(' ', '_')}",
-            "word_count": word_count,
-            "last_edited": last_edited,
-            "categories": cats,
-            "links_to": links,
-            "text": text,  # kept only during processing; not written to articles.jsonl
-        })
+    for title in titles:
+        article = _fetch_one(title)
+        if article is not None:
+            articles.append(article)
     return articles
 
 

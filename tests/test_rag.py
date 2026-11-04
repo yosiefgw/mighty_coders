@@ -1,8 +1,9 @@
 """Tests for python/embed.py and python/rag.py.
 
-embed tests need no database.
-retrieve tests insert one article + one chunk inside the test transaction
-(rolled back automatically by the conn fixture in conftest.py).
+embed tests need no database but DO require a working torch installation.
+retrieve/answer tests also need a running MariaDB with the schema loaded.
+Tests that need real embeddings are marked ``requires_torch`` and are skipped
+automatically when torch is not available (see conftest.pytest_configure).
 """
 import json
 import math
@@ -22,31 +23,36 @@ TEST_ARTICLE_ID = 4_294_960_001
 
 
 # ---------------------------------------------------------------------------
-# embed
+# embed  (requires a working torch / sentence-transformers installation)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.requires_torch
 def test_embed_returns_correct_dimension():
     vec = embed("The Solar System contains eight planets.")
     assert len(vec) == EMBEDDING_DIM
 
 
+@pytest.mark.requires_torch
 def test_embed_returns_floats():
     vec = embed("Jupiter is a gas giant.")
     assert all(isinstance(x, float) for x in vec)
 
 
+@pytest.mark.requires_torch
 def test_embed_is_unit_normalized():
     vec = embed("Mars is the fourth planet from the Sun.")
     norm = math.sqrt(sum(x * x for x in vec))
     assert abs(norm - 1.0) < 1e-5
 
 
+@pytest.mark.requires_torch
 def test_embed_different_texts_differ():
     a = embed("Jupiter")
     b = embed("Neptune")
     assert a != b
 
 
+@pytest.mark.requires_torch
 def test_embed_batch_matches_single():
     texts = ["Mercury", "Venus", "Earth"]
     batch = embed_batch(texts)
@@ -60,7 +66,7 @@ def test_embed_batch_matches_single():
 
 
 # ---------------------------------------------------------------------------
-# retrieve  (requires a running MariaDB with the schema loaded)
+# retrieve  (requires a running MariaDB with the schema loaded + torch)
 # ---------------------------------------------------------------------------
 
 def _insert_test_data(conn, vec):
@@ -79,6 +85,7 @@ def _insert_test_data(conn, vec):
     )
 
 
+@pytest.mark.requires_torch
 def test_retrieve_returns_list_of_dicts(conn):
     query_vec = embed("What is Jupiter made of?")
     _insert_test_data(conn, query_vec)  # insert a chunk whose embedding matches the query
@@ -89,6 +96,7 @@ def test_retrieve_returns_list_of_dicts(conn):
     assert len(results) >= 1
 
 
+@pytest.mark.requires_torch
 def test_retrieve_result_has_expected_keys(conn):
     query_vec = embed("What is Jupiter made of?")
     _insert_test_data(conn, query_vec)
@@ -99,6 +107,7 @@ def test_retrieve_result_has_expected_keys(conn):
     assert set(row.keys()) == {"article_title", "chunk_index", "chunk_text", "distance"}
 
 
+@pytest.mark.requires_torch
 def test_retrieve_nearest_chunk_is_correct(conn):
     """The chunk we inserted with the query vector itself should be the closest hit."""
     query_vec = embed("What is Jupiter made of?")
@@ -111,6 +120,7 @@ def test_retrieve_nearest_chunk_is_correct(conn):
     assert best["distance"] < 1e-5  # identical vectors → cosine distance ≈ 0
 
 
+@pytest.mark.requires_torch
 def test_retrieve_respects_top_k(conn):
     query_vec = embed("What is Jupiter made of?")
     _insert_test_data(conn, query_vec)
@@ -120,6 +130,7 @@ def test_retrieve_respects_top_k(conn):
     assert len(results) <= 1
 
 
+@pytest.mark.requires_torch
 def test_retrieve_distance_is_float(conn):
     query_vec = embed("Solar System")
     _insert_test_data(conn, query_vec)
@@ -177,6 +188,7 @@ def _mock_anthropic_client(reply: str):
     return fake_client
 
 
+@pytest.mark.requires_torch
 def test_answer_returns_expected_keys(conn):
     _insert_test_data(conn, embed("What is Jupiter made of?"))
     fake_client = _mock_anthropic_client("Jupiter is mostly hydrogen.")
@@ -188,6 +200,7 @@ def test_answer_returns_expected_keys(conn):
     assert set(result.keys()) == {"answer", "sources", "chunks"}
 
 
+@pytest.mark.requires_torch
 def test_answer_string_and_list_types(conn):
     _insert_test_data(conn, embed("What is Jupiter made of?"))
     fake_client = _mock_anthropic_client("Jupiter is mostly hydrogen.")
@@ -201,6 +214,7 @@ def test_answer_string_and_list_types(conn):
     assert isinstance(result["chunks"], list)
 
 
+@pytest.mark.requires_torch
 def test_answer_sources_deduplicated(conn):
     """Two chunks from the same article should produce only one source entry."""
     vec = embed("What is Jupiter made of?")
@@ -225,6 +239,7 @@ def test_answer_sources_deduplicated(conn):
     assert result["sources"].count("zz_rag_test_article") == 1
 
 
+@pytest.mark.requires_torch
 def test_answer_uses_llm_reply(conn):
     _insert_test_data(conn, embed("What is Jupiter made of?"))
     expected_reply = "Jupiter is composed of hydrogen and helium."

@@ -1,25 +1,21 @@
 """Tests for python/fetch.py.
 
 All tests run without network access: the MediaWiki API is mocked.
-Heavy ML dependencies (torch / sentence_transformers) are stubbed out so the
-tests run without a GPU or a full torch installation.
+build_chunks tests patch fetch.embed_batch directly so sentence-transformers
+is not invoked during those tests.
 """
 import sys
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
-# Stub out ML libs before any project import triggers them.
-for _mod in ("torch", "sentence_transformers", "sentence_transformers.SentenceTransformer"):
-    if _mod not in sys.modules:
-        sys.modules[_mod] = MagicMock()
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 from fetch import (  # noqa: E402
     CHUNK_OVERLAP,
     CHUNK_TARGET,
     _fetch_batch,
+    _fetch_one,
     build_chunks,
     chunk_text,
     collect_titles,
