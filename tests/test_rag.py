@@ -15,7 +15,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
-from embed import EMBEDDING_DIM, embed, embed_batch  # noqa: E402
+from embed import EMBEDDING_DIM, embed, embed_batch, embed_query  # noqa: E402
 from rag import _build_prompt, _retrieve, answer     # noqa: E402
 
 # Fake Wikipedia page id far from real ones so it never collides.
@@ -50,6 +50,20 @@ def test_embed_different_texts_differ():
     a = embed("Jupiter")
     b = embed("Neptune")
     assert a != b
+
+
+@pytest.mark.requires_torch
+def test_embed_query_differs_from_plain_embed():
+    """embed_query() prepends the BGE prefix so its vector differs from plain embed()."""
+    text = "What is Jupiter made of?"
+    assert embed_query(text) != embed(text)
+
+
+@pytest.mark.requires_torch
+def test_embed_query_is_unit_normalized():
+    vec = embed_query("What is Jupiter made of?")
+    norm = math.sqrt(sum(x * x for x in vec))
+    assert abs(norm - 1.0) < 1e-5
 
 
 @pytest.mark.requires_torch

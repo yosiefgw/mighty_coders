@@ -13,6 +13,9 @@ from sentence_transformers import SentenceTransformer
 
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 EMBEDDING_DIM = 384
+# BGE models use a query prefix at retrieval time (not at indexing time).
+# Apply this to questions in retrieve/answer; do NOT apply it to chunk text.
+QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 
 
 @lru_cache(maxsize=1)
@@ -24,6 +27,16 @@ def embed(text: str) -> List[float]:
     """Return a 384-dimensional embedding for *text*."""
     vec = _model().encode(text, normalize_embeddings=True)
     return vec.tolist()
+
+
+def embed_query(text: str) -> List[float]:
+    """Return a 384-dimensional embedding for a search query.
+
+    Prepends QUERY_PREFIX as recommended for BAAI/bge-small-en-v1.5:
+    the prefix is applied to questions at retrieval time only; chunk text
+    is indexed with plain embed() so the asymmetry improves recall.
+    """
+    return embed(QUERY_PREFIX + text)
 
 
 def embed_batch(texts: List[str]) -> List[List[float]]:
