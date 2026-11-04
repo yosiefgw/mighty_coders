@@ -2,3 +2,6 @@ pymysql
 pytest
 matplotlib
 numpy
+sentence-transformers
+anthropic
+requests
