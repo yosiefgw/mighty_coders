@@ -35,19 +35,35 @@ CHUNK_TARGET = 175   # words per chunk (aim for 150-200)
 CHUNK_OVERLAP = 30   # words shared between consecutive chunks
 BATCH_SIZE = 50      # titles per MediaWiki API request (hard limit: 50 for most props)
 REQUEST_DELAY = 1.0  # seconds between requests
+MAX_RETRIES = 5      # retries when Wikipedia answers 429 (too many requests) or 503
+
+
+def _retry_wait(resp: requests.Response, attempt: int) -> float:
+    """Seconds to wait before a retry: the server's Retry-After if given, else 5, 10, 20, ... s."""
+    try:
+        return max(1.0, float(resp.headers.get("Retry-After", "")))
+    except ValueError:
+        return 5.0 * 2 ** attempt
 
 
 def _get(params: dict) -> dict:
-    """GET the MediaWiki API with standard headers and a small delay."""
-    time.sleep(REQUEST_DELAY)
-    resp = requests.get(
-        API,
-        params={"format": "json", "formatversion": "2", **params},
-        headers={"User-Agent": USER_AGENT},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    return resp.json()
+    """GET the MediaWiki API with standard headers, a small delay, and retries on 429/503."""
+    for attempt in range(MAX_RETRIES + 1):
+        time.sleep(REQUEST_DELAY)
+        resp = requests.get(
+            API,
+            params={"format": "json", "formatversion": "2", **params},
+            headers={"User-Agent": USER_AGENT},
+            timeout=30,
+        )
+        if resp.status_code in (429, 503) and attempt < MAX_RETRIES:
+            wait = _retry_wait(resp, attempt)
+            print(f"\n  Wikipedia says {resp.status_code}, waiting {wait:.0f} s (retry {attempt + 1}/{MAX_RETRIES}) ...",
+                  flush=True)
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        return resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -181,14 +197,26 @@ def _fetch_batch(titles: list[str]) -> list[dict]:
 
 
 def fetch_articles(titles: list[str]) -> list[dict]:
-    """Fetch all *titles* in batches of BATCH_SIZE, printing progress."""
+    """Fetch all *titles* in batches of BATCH_SIZE, printing progress.
+
+    A category can list a redirect page next to its target. With redirects=true both titles
+    resolve to the same page, so each page id is kept only once (load.py refuses duplicates).
+    """
     result = []
+    seen_ids: set[int] = set()
+    duplicates = 0
     for i in range(0, len(titles), BATCH_SIZE):
         batch = titles[i: i + BATCH_SIZE]
-        fetched = _fetch_batch(batch)
-        result.extend(fetched)
+        for article in _fetch_batch(batch):
+            if article["id"] in seen_ids:
+                duplicates += 1
+                continue
+            seen_ids.add(article["id"])
+            result.append(article)
         print(f"  fetched {len(result)}/{len(titles)} articles", end="\r", flush=True)
     print()
+    if duplicates:
+        print(f"  skipped {duplicates} duplicate(s): redirect titles that point to an article already fetched")
     return result
 
 
