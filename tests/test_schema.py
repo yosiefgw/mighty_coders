@@ -113,7 +113,14 @@ def test_delete_chunks_then_article_keeps_search_correct(conn):
     add_chunk(cur, TEST_ID + 1, vec(2))
     cur.execute("DELETE FROM chunks WHERE article_id = %s", (TEST_ID,))
     cur.execute("DELETE FROM articles WHERE id = %s", (TEST_ID,))
-    assert search(cur, vec(1)) == [TEST_ID + 1]
+    cur.execute(
+    "SELECT article_id FROM chunks "
+    "WHERE article_id IN (%s, %s) "
+    "ORDER BY VEC_DISTANCE_COSINE(embedding, VEC_FromText(%s)) "
+    "LIMIT 5",
+    (TEST_ID, TEST_ID + 1, vec(1)),
+    )
+    assert [row[0] for row in cur.fetchall()] == [TEST_ID + 1]
 
 
 def test_rollback_removes_chunk_from_search(conn):

@@ -89,7 +89,7 @@ def build_query(vector, k=5, *, category=None, min_words=None, edited_since=None
     # ORDER BY must be the plain VEC_DISTANCE_COSINE(...) call (or its alias), ascending, with a
     # LIMIT, and the same distance as the index (cosine); otherwise the index cannot be used.
     sql = (
-        "SELECT c.id AS chunk_id, c.article_id, a.title, c.chunk_index, c.chunk_text, "
+        "SELECT c.id AS chunk_id, c.article_id, a.title, a.url, c.chunk_index, c.chunk_text, "
         "a.word_count, a.last_edited, "
         "VEC_DISTANCE_COSINE(c.embedding, VEC_FromText(%s)) AS distance "
         f"FROM chunks c {INDEX_HINTS[mode]} "
@@ -113,7 +113,7 @@ def search(conn, vector, k=5, *, category=None, min_words=None, edited_since=Non
       mode          "auto" (optimizer decides), "index" (force the vector index), "exact" (no index)
       ef_search     sets mhnsw_ef_search for this connection (default 20; higher = better recall, slower)
 
-    Returns a list of dicts, nearest first: chunk_id, article_id, title, chunk_index,
+    Returns a list of dicts, nearest first: chunk_id, article_id, title, url, chunk_index,
     chunk_text, word_count, last_edited, distance.
     """
     sql, params = build_query(vector, k, category=category, min_words=min_words,
