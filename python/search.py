@@ -5,12 +5,18 @@
     ORDER BY VEC_DISTANCE_COSINE(c.embedding, <question vector>) LIMIT k
 
 Three modes:
-  mode="auto"  (default) MariaDB's optimizer picks the plan. In our tests it used the vector index
-               when the filter keeps many chunks, and skipped it (exact distance on the few
-               filtered chunks) when the filter keeps only a few.
-  mode="index" FORCE INDEX: always walk the vector index (approximate HNSW search).
+  mode="index" (default) FORCE INDEX: always walk the vector index (approximate HNSW search).
+  mode="auto"  MariaDB's optimizer picks the plan.
   mode="exact" IGNORE INDEX: no vector index, exact distance for every chunk that passes the filters.
                Used as the "ground truth" when we measure index recall.
+
+Why "index" is the default (real corpus: 166 articles, 3,753 chunks, MariaDB 11.8.9, median of 5):
+with a filter, the optimizer ("auto") always chose the exact plan, even after ANALYZE TABLE
+(EXPLAIN estimated 1 chunk per article; the real number is about 30):
+    filter                              auto       index     exact    index = exact top 5?
+    min_words=3000 (broad)              181.7 ms   2.6 ms    178.7 ms   yes
+    category, 15 articles               37.8 ms    2.3 ms    37.1 ms    yes
+    category, 5 articles (strict)       17.4 ms    2.1 ms    17.1 ms    yes
 
 Filters and the LIMIT. The docs (page "Vector Overview") warn that the LIMIT is a hard cap applied
 BEFORE a WHERE filter, so a filtered query could return fewer than k rows. What we measured on
@@ -22,8 +28,8 @@ MariaDB 11.8.9 (300 non-matching chunks nearer than the 3 matching ones, FORCE I
 tests/test_search.py checks the first point (test_index_with_strict_filter_has_no_hard_cap).
 Consequences: we do NOT use a subquery with a bigger inner LIMIT (that would itself be a hard
 cap). When every matching row matters (strict filter, ground truth), use mode="exact" or a higher
-ef_search. In mode="auto" the optimizer often skips the index for strict filters anyway.
-Measured only on small synthetic data so far; to be re-checked on the real corpus.
+ef_search. On the real corpus the index returned the same top 5 as exact search for all
+44 ground-truth questions (python/evaluate.py) and for the three filters above.
 
 Docs: https://mariadb.com/docs/server/reference/sql-structure/vectors/vector-overview
       https://mariadb.com/docs/server/reference/sql-structure/vectors/vector-system-variables
@@ -79,7 +85,7 @@ def _filters(category, min_words, edited_since, linked_from):
 
 
 def build_query(vector, k=5, *, category=None, min_words=None, edited_since=None,
-                linked_from=None, mode="auto"):
+                linked_from=None, mode="index"):
     """Return (sql, params). Separate from search() so tests can run EXPLAIN on the same SQL."""
     if mode not in INDEX_HINTS:
         raise ValueError(f"mode must be one of {sorted(INDEX_HINTS)}, got {mode!r}")
@@ -101,7 +107,7 @@ def build_query(vector, k=5, *, category=None, min_words=None, edited_since=None
 
 
 def search(conn, vector, k=5, *, category=None, min_words=None, edited_since=None,
-           linked_from=None, mode="auto", ef_search=None):
+           linked_from=None, mode="index", ef_search=None):
     """The k chunks nearest to `vector` (a list of 384 numbers) that pass all given filters.
 
     Filters (all optional, combined with AND):
@@ -110,7 +116,7 @@ def search(conn, vector, k=5, *, category=None, min_words=None, edited_since=Non
       edited_since  only articles last edited on/after this date, e.g. "2024-01-01"
       linked_from   only articles that the article with this title links to
     Tuning:
-      mode          "auto" (optimizer decides), "index" (force the vector index), "exact" (no index)
+      mode          "index" (default, force the vector index), "auto" (optimizer decides), "exact" (no index)
       ef_search     sets mhnsw_ef_search for this connection (default 20; higher = better recall, slower)
 
     Returns a list of dicts, nearest first: chunk_id, article_id, title, chunk_index,

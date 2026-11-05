@@ -38,10 +38,10 @@
 --    Normally Python embeds a question with bge-small-en-v1.5 and sends 384 numbers:
 --      SET @q = VEC_FromText('[0.0123, -0.0456, ...]');
 --    Here, so the file runs without Python, we use the embedding of an existing chunk:
---    "find text similar to the first chunk of the article about Titan".
+--    "find text similar to the first chunk of the article about Io, the volcanic moon of Jupiter".
 -- -----------------------------------------------------------------------------------------
 SET @q = (SELECT c.embedding FROM chunks c JOIN articles a ON a.id = c.article_id
-          WHERE a.title = 'Titan (moon)' AND c.chunk_index = 0);
+          WHERE a.title = 'Io (moon)' AND c.chunk_index = 0);
 SELECT @q IS NOT NULL AS query_vector_found;   -- must be 1; if 0, change the title above
 
 
@@ -62,7 +62,7 @@ SELECT a.title, c.chunk_index, ROUND(VEC_DISTANCE_COSINE(c.embedding, @q), 4) AS
 FROM chunks c
 JOIN articles a ON a.id = c.article_id
 WHERE EXISTS (SELECT 1 FROM article_categories ac JOIN categories cat ON cat.id = ac.category_id
-              WHERE ac.article_id = a.id AND cat.name = 'Moons of Saturn')
+              WHERE ac.article_id = a.id AND cat.name = 'Planets of the Solar System')
 ORDER BY VEC_DISTANCE_COSINE(c.embedding, @q)
 LIMIT 5;
 
@@ -90,13 +90,13 @@ LIMIT 5;
 
 
 -- -----------------------------------------------------------------------------------------
--- 5. Filter: only articles that the article "Saturn" links to (join through links).
+-- 5. Filter: only articles that the article "Jupiter" links to (join through links).
 -- -----------------------------------------------------------------------------------------
 SELECT a.title, c.chunk_index, ROUND(VEC_DISTANCE_COSINE(c.embedding, @q), 4) AS distance
 FROM chunks c
 JOIN articles a ON a.id = c.article_id
 WHERE EXISTS (SELECT 1 FROM links l JOIN articles src ON src.id = l.from_article_id
-              WHERE src.title = 'Saturn' AND l.to_article_id = a.id)
+              WHERE src.title = 'Jupiter' AND l.to_article_id = a.id)
 ORDER BY VEC_DISTANCE_COSINE(c.embedding, @q)
 LIMIT 5;
 
@@ -109,11 +109,11 @@ SELECT a.title, a.word_count, a.last_edited, c.chunk_index,
 FROM chunks c
 JOIN articles a ON a.id = c.article_id
 WHERE EXISTS (SELECT 1 FROM article_categories ac JOIN categories cat ON cat.id = ac.category_id
-              WHERE ac.article_id = a.id AND cat.name = 'Moons of Saturn')
+              WHERE ac.article_id = a.id AND cat.name = 'Planets of the Solar System')
   AND a.word_count >= 1000
   AND a.last_edited >= '2024-01-01'
   AND EXISTS (SELECT 1 FROM links l JOIN articles src ON src.id = l.from_article_id
-              WHERE src.title = 'Saturn' AND l.to_article_id = a.id)
+              WHERE src.title = 'Jupiter' AND l.to_article_id = a.id)
 ORDER BY VEC_DISTANCE_COSINE(c.embedding, @q)
 LIMIT 5;
 
@@ -209,7 +209,7 @@ SET SESSION mhnsw_ef_search = DEFAULT;
 START TRANSACTION;
 INSERT INTO chunks (article_id, chunk_index, word_count, chunk_text, embedding)
 SELECT a.id, 9999, 3, 'transaction demo chunk', @q
-FROM articles a WHERE a.title = 'Titan (moon)';
+FROM articles a WHERE a.title = 'Io (moon)';
 
 SELECT c.chunk_index, c.chunk_text, ROUND(VEC_DISTANCE_COSINE(c.embedding, @q), 4) AS distance
 FROM chunks c ORDER BY VEC_DISTANCE_COSINE(c.embedding, @q) LIMIT 3;   -- the demo chunk is here

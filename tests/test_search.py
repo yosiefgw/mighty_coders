@@ -171,3 +171,10 @@ def test_ef_search_is_set(data):
     cur.execute("SELECT @@SESSION.mhnsw_ef_search")
     assert cur.fetchone()[0] == 50
     cur.execute("SET SESSION mhnsw_ef_search = DEFAULT")
+
+
+def test_default_mode_uses_vector_index_with_filter(data):
+    """Default is mode="index": with a filter, MariaDB's optimizer ("auto") chose the slow exact plan
+    on the real corpus (about 70x slower, same results), so search() forces the index by default."""
+    sql, params = build_query(QUERY, k=3, category="zz_test_far")
+    assert INDEX_NAME in explain_keys(data, sql, params)
