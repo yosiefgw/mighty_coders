@@ -102,6 +102,8 @@ def timed_search(conn, vector, k, mode, ef_search, repeat):
 
 def evaluate(conn, questions, vectors, k, ef_values, repeat):
     """One result row per configuration: exact, then index with each ef_search value."""
+    if not questions:
+        raise ValueError("no questions to evaluate")
     exact_ids, results = [], []
     configs = [("exact", None)] + [("index", ef) for ef in ef_values]
     for mode, ef in configs:
@@ -127,12 +129,28 @@ def evaluate(conn, questions, vectors, k, ef_values, repeat):
     return results
 
 
-def missing_answers(conn, questions) -> list[tuple]:
-    """(question id, title) for answer titles that are not in the articles table."""
+def usable_questions(questions: list[dict], titles: set[str]) -> tuple[list[dict], list[int], list[tuple]]:
+    """Keep only answer titles that exist in the database.
+
+    Returns (questions to evaluate, ids of skipped questions, (question id, title) of dropped titles).
+    A question is skipped only when NONE of its accepted answers is in the database; otherwise it is
+    evaluated with the answers that exist.
+    """
+    kept, skipped, dropped = [], [], []
+    for q in questions:
+        present = [a for a in q["answers"] if a in titles]
+        dropped += [(q["id"], a) for a in q["answers"] if a not in titles]
+        if present:
+            kept.append({**q, "answers": present})
+        else:
+            skipped.append(q["id"])
+    return kept, skipped, dropped
+
+
+def article_titles(conn) -> set[str]:
     cur = conn.cursor()
     cur.execute("SELECT title FROM articles")
-    titles = {row[0] for row in cur.fetchall()}
-    return [(q["id"], a) for q in questions for a in q["answers"] if a not in titles]
+    return {row[0] for row in cur.fetchall()}
 
 
 def main() -> None:
@@ -150,11 +168,16 @@ def main() -> None:
 
     questions = read_questions(args.file)
     conn = get_connection()
-    missing = missing_answers(conn, questions)
-    if missing:
-        print("Answer titles not in the database (questions skipped):", missing)
-        bad_ids = {qid for qid, _ in missing}
-        questions = [q for q in questions if q["id"] not in bad_ids]
+    total = len(questions)
+    questions, skipped, dropped = usable_questions(questions, article_titles(conn))
+    if not questions:
+        conn.close()
+        sys.exit(f"None of the {total} questions has an answer article in the database. "
+                 "Load the corpus first (see README: fetch.py and load.py).")
+    if dropped:
+        print(f"{len(dropped)} answer title(s) not in the database, ignored, e.g. {dropped[:3]}")
+    if skipped:
+        print(f"{len(skipped)} question(s) skipped, none of their answers is in the database: {skipped}")
 
     texts = [(BGE_QUERY_PREFIX if args.prefix else "") + q["question"] for q in questions]
     vectors = embed_batch(texts)

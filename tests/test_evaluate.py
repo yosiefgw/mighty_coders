@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from evaluate import DEFAULT_FILE, first_hit_rank, overlap, percentile, read_questions, score
+from evaluate import (DEFAULT_FILE, evaluate, first_hit_rank, overlap, percentile, read_questions, score,
+                      usable_questions)
 
 
 def test_first_hit_rank():
@@ -50,3 +51,33 @@ def test_ground_truth_file_is_valid():
     for q in questions:
         assert q["question"].endswith("?")
         assert all(isinstance(a, str) and a for a in q["answers"])
+
+
+def test_question_kept_if_one_accepted_answer_exists():
+    """Review PR #9: skip a question only when NONE of its answers is in the database."""
+    questions = [
+        {"id": 4, "question": "Olympus Mons?", "answers": ["Mars", "List of tallest mountains in the Solar System"]},
+        {"id": 9, "question": "Heart-shaped region?", "answers": ["Pluto"]},
+    ]
+    kept, skipped, dropped = usable_questions(questions, titles={"Mars"})
+    assert [q["id"] for q in kept] == [4]
+    assert kept[0]["answers"] == ["Mars"]                       # only answers that exist are scored
+    assert skipped == [9]
+    assert dropped == [(4, "List of tallest mountains in the Solar System"), (9, "Pluto")]
+
+
+def test_usable_questions_does_not_change_the_input():
+    questions = [{"id": 1, "question": "Q?", "answers": ["A", "B"]}]
+    usable_questions(questions, titles={"A"})
+    assert questions[0]["answers"] == ["A", "B"]
+
+
+def test_empty_database_skips_everything():
+    kept, skipped, _ = usable_questions([{"id": 1, "question": "Q?", "answers": ["A"]}], titles=set())
+    assert kept == [] and skipped == [1]
+
+
+def test_evaluate_refuses_no_questions():
+    """Review PR #9: an empty question list gave 'StatisticsError: no median for empty data'."""
+    with pytest.raises(ValueError, match="no questions"):
+        evaluate(conn=None, questions=[], vectors=[], k=5, ef_values=[20], repeat=1)
