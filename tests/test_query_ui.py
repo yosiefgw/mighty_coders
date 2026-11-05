@@ -39,20 +39,20 @@ def ui_mocks(monkeypatch):
 
     get_connection_mock = Mock(return_value=conn)
 
-    # Mock embedding generation
-    embed_mock = Mock(return_value=[0.1] * 384)
+    # Mock embedding generation (query_ui uses embed_query, not embed directly)
+    embed_query_mock = Mock(return_value=[0.1] * 384)
 
     # Mock MariaDB search
     search_mock = Mock(return_value=[])
 
     monkeypatch.setattr(db, "get_connection", get_connection_mock)
-    monkeypatch.setattr(embed, "embed", embed_mock)
+    monkeypatch.setattr(embed, "embed_query", embed_query_mock)
     monkeypatch.setattr(search, "search", search_mock)
 
     return {
         "conn": conn,
         "get_connection": get_connection_mock,
-        "embed": embed_mock,
+        "embed_query": embed_query_mock,
         "search": search_mock,
     }
 
@@ -111,7 +111,7 @@ def test_empty_question_displays_warning(ui_mocks):
         for warning in app.warning
     )
 
-    ui_mocks["embed"].assert_not_called()
+    ui_mocks["embed_query"].assert_not_called()
     ui_mocks["get_connection"].assert_not_called()
     ui_mocks["search"].assert_not_called()
 
@@ -125,11 +125,11 @@ def test_valid_question_generates_embedding(ui_mocks):
     app = create_app()
     app = submit_question(app, "What is Jupiter made of?")
 
-    ui_mocks["embed"].assert_called_once_with(
+    ui_mocks["embed_query"].assert_called_once_with(
         "What is Jupiter made of?"
-    )
+    )  # embed_query receives the raw question; the BGE prefix is applied inside
 
-    assert len(ui_mocks["embed"].return_value) == 384
+    assert len(ui_mocks["embed_query"].return_value) == 384
     assert len(app.exception) == 0
 
 
@@ -151,7 +151,7 @@ def test_valid_question_connects_to_database(ui_mocks):
 def test_valid_question_calls_vector_search(ui_mocks):
     """The UI should pass the generated vector to search()."""
     query_vector = [0.1] * 384
-    ui_mocks["embed"].return_value = query_vector
+    ui_mocks["embed_query"].return_value = query_vector
     ui_mocks["search"].return_value = [
         sample_result()
     ]
