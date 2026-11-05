@@ -4,6 +4,8 @@
 import json
 import statistics
 import time
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -105,7 +107,7 @@ def measure(function, repeats=10):
 
 
 def show_latency_chart(python_ms, exact_ms, indexed_ms):
-    """Display a latency comparison chart (PNG export can be added later)."""
+    """Save and display the latency comparison chart."""
 
     methods = [
         "Python brute force",
@@ -132,8 +134,15 @@ def show_latency_chart(python_ms, exact_ms, indexed_ms):
         )
 
     fig.tight_layout()
-    plt.show()
 
+    output_path = Path("docs/benchmark_latency.png")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    print(f"\nChart saved to {output_path}")
+
+    plt.show()
+    plt.close(fig)
 
 def main(repeats=10, k=5, query_count=5):
     """Benchmark the current database contents without hardcoded dataset sizes."""
