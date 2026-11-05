@@ -103,7 +103,7 @@ Why it looks like this:
 | Distance | cosine | matches the normalized vectors of the model |
 | Index | HNSW, `M=8` | see Data model; `ef_search` left at the default 20 (no difference measured) |
 | Search plan | vector index forced by default (`mode="index"`) | the optimizer chose the 7–70× slower exact plan with filters, same results |
-| Query text | **proposed:** bge query instruction in front of questions (not yet used by `rag.py`) | measured: hit@5 0.86 → 0.91, hit@1 0.45 → 0.55 |
+| Query text | bge query instruction in front of questions (`embed_query()` in `embed.py`; chunks are embedded without it) | measured: hit@5 0.86 → 0.91, hit@1 0.45 → 0.55 |
 
 Chunking in practice: the last chunk of each article holds the remaining words, so it can be shorter:
 144 of 3,753 chunks (3.8%) are under 150 words (minimum 32). Average chunk length: 172 words.
