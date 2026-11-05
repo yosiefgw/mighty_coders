@@ -1,4 +1,4 @@
-Project 4: [Vector search and RAG, natively](https://mariadb.org/bachelor_hackathon_2026-09/)
+A project for area 4, "Vector search and RAG, natively" for the [MariaDB student database projects, 2026-09](https://mariadb.org/bachelor_hackathon_2026-09/).
 
 # mighty_coders
 
