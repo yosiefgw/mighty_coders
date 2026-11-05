@@ -4,9 +4,11 @@
 import json
 import statistics
 import time
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
+
 from db import get_connection
 from search import DIM, search, to_vector_text
 
