@@ -14,7 +14,7 @@ from time import perf_counter
 import streamlit as st
 
 from db import get_connection
-from embed import embed
+from embed import embed_query
 from search import search
 
 
@@ -366,7 +366,7 @@ if search_clicked:
                     flush=True,
                 )
 
-                query_vector = embed(question.strip())
+                query_vector = embed_query(question.strip())
 
                 print(
                     "    Model: BAAI/bge-small-en-v1.5",
