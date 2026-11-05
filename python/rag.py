@@ -23,7 +23,7 @@ from typing import List
 import anthropic
 
 from db import get_connection
-from embed import embed
+from embed import embed_query
 from search import search
 
 DEFAULT_TOP_K = 5
@@ -67,7 +67,7 @@ def retrieve(question: str, top_k: int = DEFAULT_TOP_K, **kwargs) -> List[dict]:
     Optional keyword filters (category, min_words, edited_since, linked_from)
     are forwarded to search() for hybrid search.
     """
-    query_vec = embed(question)
+    query_vec = embed_query(question)
     return _retrieve(query_vec, top_k, **kwargs)
 
 
@@ -96,7 +96,7 @@ def answer(question: str, top_k: int = DEFAULT_TOP_K, conn=None, **kwargs) -> di
       "sources" – list of article titles used as context (deduplicated, ordered)
       "chunks"  – the raw list of dicts from _retrieve()
     """
-    query_vec = embed(question)
+    query_vec = embed_query(question)
     chunks = _retrieve(query_vec, top_k, conn=conn, **kwargs)
 
     prompt = _build_prompt(question, chunks)
