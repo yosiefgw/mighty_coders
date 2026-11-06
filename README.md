@@ -30,9 +30,14 @@ An optional RAG step sends the best chunks to an LLM and returns an answer with 
   the optimizer always chose an exact scan instead of the vector index: 7–70× slower, with the same
   results. `ANALYZE TABLE` did not change it (`EXPLAIN` estimates 1 chunk per article; the real number is
   about 30). So `search()` forces the vector index by default ([table below](#filters-and-the-optimizer)).
-- **`mhnsw_ef_search` made no difference** (10, 20, 50, 100 gave identical results). At a few thousand
-  chunks the index finds the true nearest neighbours with very little effort; a much larger corpus is
-  needed to see the recall/speed trade-off.
+- **`mhnsw_ef_search` made no difference on our corpus** (10, 20, 50, 100 gave identical results). At a
+  few thousand chunks the index finds the true nearest neighbours with very little effort.
+- **On a large index, the vector index cache decides the search quality.** On 100,000 synthetic vectors
+  (384 dimensions), recall@10 stayed at about 1–2% whatever `ef_search` was, with the default
+  `mhnsw_max_cache_size` of 16 MB. After `SET GLOBAL mhnsw_max_cache_size = 1073741824` (1 GB), recall
+  rose with `ef_search` to about 17% at 400, and queries got faster. Rebuilding the index with the big
+  cache gave the same numbers, so the cache limits the search, not the build. The documentation lists the
+  variable but does not warn about this ([table below](#vector-index-cache-and-ef_search-synthetic)).
 
 **Things the MariaDB documentation did not tell us**, all reproduced by tests in `tests/`:
 
@@ -179,6 +184,18 @@ python python/evaluate.py --prefix                       # same, with the bge qu
 python python/benchmarking.py                            # Python brute force vs MariaDB exact vs index (saves docs/benchmark_latency.png)
 ```
 
+**Synthetic `ef_search` / cache experiment** (optional, about 5–10 minutes; builds a separate table
+`synth_vectors` with 100,000 random vectors and does not touch the corpus):
+
+```bash
+python python/ef_search_experiment.py                    # with the default 16 MB cache
+docker exec mighty_coders_vector_db mariadb -uroot -prootpassword -e "SET GLOBAL mhnsw_max_cache_size = 1073741824;"
+python python/ef_search_experiment.py                    # again with 1 GB (the table is reused)
+docker exec mighty_coders_vector_db mariadb -umcuser -pmcpassword mighty_coders -e "DROP TABLE synth_vectors;"   # clean up
+```
+
+`SET GLOBAL` needs the root user (password from `.env`) and is lost when the container restarts.
+
 **6. RAG answer (optional, needs an Anthropic API key):** nothing reads `.env` into Python, so export the key first:
 
 ```bash
@@ -230,6 +247,30 @@ the vector index, `exact` forbids it:
 `word_count` index on `articles`, estimates `rows 1` chunk per article, and sorts all their chunks
 (`Using temporary; Using filesort`). With `FORCE INDEX` it reads `idx_chunks_embedding` (12 rows).
 
+### Vector index cache and ef_search (synthetic)
+
+100,000 random normalized 384-dim vectors (fixed seed), `M=8`, `DISTANCE=cosine`, 100 random queries,
+recall@10 against exact search (`IGNORE INDEX`). Two machines: Windows (teammate) and macOS.
+
+| ef_search | 16 MB cache (default), Windows | 1 GB, Windows | 1 GB, Windows, run 2 | 16 MB, macOS | 1 GB, macOS | 1 GB, macOS, index rebuilt |
+|---|---|---|---|---|---|---|
+| 10 | 0.6% | 0.5% | 0.5% | 0.8% | 0.8% | 1.1% |
+| 100 | 1.1% | 4.5% | 4.6% | 2.1% | 6.6% | 5.6% |
+| 400 | 1.3% | 17.0% | 17.2% | 2.1% | 17.9% | 17.2% |
+
+| 16 MB cache (default) | 1 GB cache |
+|---|---|
+| ![Recall and latency vs ef_search with the default 16 MB cache](docs/ef_search_tradeoff_16MB.png) | ![Recall and latency vs ef_search with a 1 GB cache](docs/ef_search_tradeoff_1GB.png) |
+
+- With 16 MB, more search effort barely helps: recall stays at 1–2%. With 1 GB, recall rises with
+  `ef_search`, the normal HNSW trade-off, and latency at `ef_search` 400 dropped (macOS: 4.4 → 1.7 ms).
+- Rebuilding the index after raising the cache gave the same recall, so the cache limits the search.
+- Random 384-dim vectors are the hardest case for HNSW (all points are almost equally far apart), which is
+  why even 17% is low. On our real corpus the index reached recall 1.000.
+- Full numbers: [`docs/ef_search_results_16MB.csv`](docs/ef_search_results_16MB.csv),
+  [`docs/ef_search_results_1GB.csv`](docs/ef_search_results_1GB.csv),
+  [`docs/ef_search_results_1GB_run2.csv`](docs/ef_search_results_1GB_run2.csv).
+
 ### Python brute force vs MariaDB
 
 ![Median latency: Python brute force 1.5 ms, MariaDB exact 235 ms, MariaDB indexed 2.5 ms](docs/benchmark_latency.png)
@@ -252,12 +293,15 @@ that stays in sync with the articles.
 - **One system to keep in sync:** article metadata and vectors live in the same rows. No second copy
   that can drift apart.
 - **`EXPLAIN` works for vector queries too**, which is how we found the optimizer problem above.
-- **The cost:** a database feature that is still young. The cascade problem and the optimizer's plan
-  choice are the clearest examples.
+- **The cost:** a database feature that is still young. The cascade problem, the optimizer's plan
+  choice and the small default index cache are the clearest examples.
 
 ## Limits
 
 - Small corpus (166 articles); latency numbers are tiny and `ef_search` showed no effect.
+- The `ef_search` / cache experiment uses random vectors, the worst case for HNSW; real embeddings have
+  structure and would reach higher recall. We did not measure the cache effect on real text at that size.
+- `docker-compose.yml` keeps the default 16 MB cache; for an index of that size it would need to be raised.
 - 44 ground-truth questions: one question is about 2 percentage points. We wrote the questions ourselves
   (with AI help) while knowing the article titles, which can make them easier than real users' questions.
 - One laptop and one MariaDB version (11.8.9) for the main numbers.
@@ -270,7 +314,8 @@ that stays in sync with the articles.
 - `sql/init/`: numbered SQL files, run in order on first start (`01_vector_schema.sql`)
 - `sql/queries/`: hybrid search examples to run by hand
 - `python/`: `fetch.py` (download, chunk, embed), `load.py` (into MariaDB), `search.py` (hybrid search),
-  `query_ui.py` (web page), `embed.py`, `rag.py`, `evaluate.py` (ground truth), `benchmarking.py`, `db.py`
+  `query_ui.py` (web page), `embed.py`, `rag.py`, `evaluate.py` (ground truth), `benchmarking.py`,
+  `ef_search_experiment.py` (synthetic cache / `ef_search` experiment), `db.py`
 - `eval/`: the ground-truth questions
 - `tests/`: pytest tests
 - `data/`: dataset instructions (downloaded files are not committed)
@@ -300,4 +345,4 @@ that stays in sync with the articles.
 
 - Yosief Gebrewahid Kidane ([@yosiefgw](https://github.com/yosiefgw)): schema, hybrid search, loader, SQL examples, ground truth and evaluation
 - Timofey Stukalin ([@tstukalin1](https://github.com/tstukalin1)): download, chunking and embedding, RAG
-- Dinu Panackal Devassia ([@DinuPD](https://github.com/DinuPD)): benchmarking, web page
+- Dinu Panackal Devassia ([@DinuPD](https://github.com/DinuPD)): benchmarking, web page, ef_search / cache experiment
