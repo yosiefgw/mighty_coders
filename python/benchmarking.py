@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from db import get_connection
-from search import DIM, search, to_vector_text
+from search import DIM, search
 
 
 def cosine_distances(vectors, query):
