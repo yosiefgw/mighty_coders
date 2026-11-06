@@ -380,12 +380,12 @@ recall@10 against exact search (`IGNORE INDEX`). Two machines: Windows (teammate
 | 100 | 1.1% | 4.5% | 4.6% | 2.1% | 6.6% | 5.6% |
 | 400 | 1.3% | 17.0% | 17.2% | 2.1% | 17.9% | 17.2% |
 
-| 16 MB cache (default) | 1 GB cache |
+| 16 MB cache (default), Windows run | 1 GB cache, Windows run |
 |---|---|
 | ![Recall and latency vs ef_search with the default 16 MB cache](docs/ef_search_tradeoff_16MB.png) | ![Recall and latency vs ef_search with a 1 GB cache](docs/ef_search_tradeoff_1GB.png) |
 
 - With 16 MB, more search effort barely helps: recall stays at 1–2%. With 1 GB, recall rises with
-  `ef_search`, the normal HNSW trade-off, and latency at `ef_search` 400 dropped (macOS: 4.4 → 1.7 ms).
+  `ef_search`, the normal HNSW trade-off, and latency at `ef_search` 400 dropped (Windows, charts above: 8.0 → 3.3 ms; macOS: 4.4 → 1.7 ms).
 - Rebuilding the index after raising the cache gave the same recall, so the cache limits the search.
 - Random 384-dim vectors are the hardest case for HNSW (all points are almost equally far apart), which is
   why even 17% is low. On our real corpus the index reached recall 1.000.
