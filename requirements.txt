@@ -1,2 +1,11 @@
-pymysql
-pytest
+# Exact versions we tested with (Python 3.13). Newer versions may work, but these are known to work.
+pymysql==1.2.3
+pytest==9.1.1
+matplotlib==3.11.2
+numpy==2.5.4
+sentence-transformers==6.2.0
+transformers==5.22.1
+torch==2.15.0
+anthropic==2.4.0
+requests==2.34.2
+streamlit==1.66.1
