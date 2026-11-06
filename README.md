@@ -5,6 +5,24 @@ A project for area 4, "Vector search and RAG, natively" for the [MariaDB student
 Retrieval over Wikipedia with MariaDB's native VECTOR type.
 Capstone I, Constructor University, with the MariaDB Foundation.
 
+**The path in short:** clone → `docker compose up -d` (MariaDB 11.8) → `pip install -r requirements.txt`
+→ download and load the articles (about 40 minutes) → `streamlit run python/query_ui.py` and ask a
+question. Step by step: [How to run it](#how-to-run-it).
+
+**Contents:**
+[What this is](#what-this-is) ·
+[What we found](#what-we-found) ·
+[Versions and setup](#versions-and-setup) ·
+[Data model](#data-model) ·
+[Decisions](#decisions) ·
+[How to run it](#how-to-run-it) ·
+[Results](#results) ·
+[What the database-native approach gave us](#what-the-database-native-approach-gave-us) ·
+[Limits](#limits) ·
+[Layout](#layout) ·
+[How it was made](#how-it-was-made) ·
+[Team](#team)
+
 ## What this is
 
 Semantic search over Wikipedia articles about the Solar System, done **inside MariaDB 11.8**.
@@ -115,13 +133,117 @@ Chunking in practice: the last chunk of each article holds the remaining words, 
 
 ## How to run it
 
+### Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+- Python 3.10 or newer (we used 3.13) and Git
+- Internet access: the setup downloads Python packages (including PyTorch, a large download), the
+  embedding model (about 130 MB, on first use) and the Wikipedia articles
+
+### Setup
+
+**1. Clone the repository**
+
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env                               # docker compose reads it
-docker compose down -v && docker compose up -d     # -v gives a clean start; init scripts only run on first start
-pytest -q                                          # wait ~30 s after the start
+git clone https://github.com/yosiefgw/mighty_coders.git
+cd mighty_coders
 ```
+
+**2. Configure environment variables**
+
+```bash
+# macOS / Linux
+cp .env.example .env
+
+# Windows
+copy .env.example .env
+```
+
+The default values work out of the box. Change `DB_PORT` only if port `3308` is already used on your
+machine. `ANTHROPIC_API_KEY` is only needed for the optional RAG step.
+
+**3. Start MariaDB**
+
+```bash
+docker compose up -d
+```
+
+MariaDB 11.8 is then available at `127.0.0.1:3308`. On the first start it creates the tables from
+`sql/init/01_vector_schema.sql` (wait about 30 seconds before the next step).
+
+To stop it:
+
+```bash
+docker compose down
+```
+
+To stop it **and delete all data** (including the loaded articles):
+
+```bash
+docker compose down -v
+```
+
+> **After pulling changes to `sql/init/`:** these files run only on the first start of an empty
+> database, so recreate it, then load the data again (steps 1–2 below):
+>
+> ```bash
+> docker compose down -v && docker compose up -d
+> ```
+
+**4. Set up the Python environment**
+
+Create it:
+
+```bash
+# macOS / Linux
+python3 -m venv .venv
+
+# Windows
+python -m venv .venv
+```
+
+Activate it:
+
+```bash
+# macOS / Linux
+source .venv/bin/activate
+
+# Windows
+.venv\Scripts\activate
+```
+
+Install the dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+**5. Check the connection**
+
+```bash
+pytest -q tests/test_smoke.py
+```
+
+Expected output:
+
+```
+1 passed
+```
+
+This test connects to the database and checks that the server is MariaDB 11.7 or newer, which the
+`VECTOR` type needs. Then run the whole test suite:
+
+```bash
+pytest -q
+```
+
+With an empty database a few tests are skipped, because they need the loaded articles. After loading
+the data (below), all of them run.
+
+### Load the data and use it
+
+> **On Windows:** the commands below are written for a macOS/Linux terminal (multi-line `python -c "…"`,
+> `export`, `< file.sql`). On Windows, run them in **Git Bash** (installed with Git for Windows).
 
 **1. Download, chunk and embed** (writes JSONL files to `data/`, about 40 minutes because of Wikipedia's rate limit):
 
