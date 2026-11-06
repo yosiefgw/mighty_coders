@@ -8,14 +8,11 @@ import sys
 import os
 from unittest.mock import patch
 
-import pytest
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 from fetch import (  # noqa: E402
     CHUNK_OVERLAP,
     CHUNK_TARGET,
     _fetch_batch,
-    _fetch_one,
     build_chunks,
     chunk_text,
     collect_titles,

@@ -1,6 +1,5 @@
 """Tests for the pure helpers in python/evaluate.py and for eval/ground_truth.jsonl (no model needed)."""
 import json
-from pathlib import Path
 
 import pytest
 
