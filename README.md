@@ -136,7 +136,7 @@ Chunking in practice: the last chunk of each article holds the remaining words, 
 ### Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
-- Python 3.10 or newer (we used 3.13) and Git
+- Python 3.13 (the versions in `requirements.txt` were tested with it) and Git
 - Internet access: the setup downloads Python packages (including PyTorch, a large download), the
   embedding model (about 130 MB, on first use) and the Wikipedia articles
 
