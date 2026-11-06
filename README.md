@@ -5,7 +5,7 @@ A project for area 4, "Vector search and RAG, natively" for the [MariaDB student
 Retrieval over Wikipedia with MariaDB's native VECTOR type.
 Capstone I, Constructor University, with the MariaDB Foundation.
 
-**The path in short:** clone → `docker compose up -d` (MariaDB 11.8) → `pip install -r requirements.txt`
+**The path in short:** clone → `cp .env.example .env` → `docker compose up -d` (MariaDB 11.8) → `pip install -r requirements.txt`
 → download and load the articles (about 40 minutes) → `streamlit run python/query_ui.py` and ask a
 question. Step by step: [How to run it](#how-to-run-it).
 
@@ -440,6 +440,7 @@ that stays in sync with the articles.
   `ef_search_experiment.py` (synthetic cache / `ef_search` experiment), `db.py`
 - `eval/`: the ground-truth questions
 - `tests/`: pytest tests
+- `.github/workflows/tests.yml`: GitHub runs the README setup and `pytest` on every push and pull request
 - `data/`: dataset instructions (downloaded files are not committed)
 - `docs/`: results, charts and screenshots for this README
 - `CONTRIBUTING.md`: how we work (branches, pull requests, reviews)
