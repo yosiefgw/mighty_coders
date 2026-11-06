@@ -1,0 +1,52 @@
+# Runs the test suite on GitHub for every push to main/dev and every pull request.
+# It follows the README setup: .env from the example, MariaDB 11.8 with docker compose, pip install, pytest.
+name: tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Configure (README, Setup step 2)
+        run: cp .env.example .env
+
+      - name: Start MariaDB 11.8 (README, Setup step 3)
+        run: docker compose up -d
+
+      - name: Install Python packages (README, Setup step 4)
+        run: pip install -r requirements.txt
+
+      - name: Wait until MariaDB accepts connections
+        run: |
+          python - <<'PY'
+          import sys, time
+          sys.path.insert(0, "python")
+          from db import get_connection
+          for _ in range(60):
+              try:
+                  get_connection().close()
+                  print("MariaDB is ready")
+                  break
+              except Exception:
+                  time.sleep(2)
+          else:
+              sys.exit("MariaDB did not start")
+          PY
+
+      - name: Run the tests
+        run: pytest -q
+
+      - name: MariaDB log (only if something failed)
+        if: failure()
+        run: docker compose logs
