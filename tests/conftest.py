@@ -12,16 +12,34 @@ def pytest_configure(config):
         "markers",
         "requires_torch: mark test as requiring a working torch/sentence-transformers installation",
     )
-    """Stub torch/sentence_transformers early if they cannot be loaded.
+    """Stub torch/sentence_transformers early if they cannot be loaded or crash.
 
     This prevents collection-time ImportErrors in modules that import embed.py.
     When the stub is active, tests that require real embeddings are skipped via
     the ``requires_torch`` marker (see pytest_collection_modifyitems below).
+
+    A subprocess probe is used to detect runtime crashes (e.g. MPS/Metal GPU
+    incompatibility on macOS) that cannot be caught with a plain try/except.
     """
+    import subprocess
+
+    python = sys.executable
+    python_path = os.path.join(os.path.dirname(__file__), "..", "python")
+    probe = (
+        "import sys, os; sys.path.insert(0, os.path.abspath(r'" + python_path + "')); "
+        "from embed import embed; embed('probe')"
+    )
     try:
-        import torch  # noqa: F401
-        config._torch_available = True
-    except (ImportError, OSError):
+        result = subprocess.run(
+            [python, "-c", probe],
+            timeout=60,
+            capture_output=True,
+        )
+        torch_ok = result.returncode == 0
+    except Exception:
+        torch_ok = False
+
+    if not torch_ok:
         from unittest.mock import MagicMock
         for mod in (
             "torch",
@@ -29,7 +47,7 @@ def pytest_configure(config):
             "sentence_transformers.SentenceTransformer",
         ):
             sys.modules.setdefault(mod, MagicMock())
-        config._torch_available = False
+    config._torch_available = torch_ok
 
 
 def pytest_collection_modifyitems(session, config, items):
