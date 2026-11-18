@@ -471,7 +471,7 @@ that stays in sync with the articles.
   of two MediaWiki API limits (one extract and no `rvlimit` per multi-page request).
 - **Every finding is a test.** The cascade bug, the collation, the filter behaviour and the default plan
   are checked by `pytest` (with the corpus loaded: all tests pass).
-- **AI use:** we used AI assistants (Claude) for code, tests and reviews; every result was run and checked
+- **AI use:** we used AI assistants (Claude and ChatGPT) for code, tests and reviews; every result was run and checked
   on our machines. Representative examples of prompts (paraphrased) and what they produced:
 
   **Yosief: schema** (`sql/init/01_vector_schema.sql`)
@@ -523,6 +523,19 @@ that stays in sync with the articles.
   QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
   ```
   We measured the effect: hit@5 improved from 0.86 → 0.91, hit@1 from 0.45 → 0.55.
+
+  **Dinu: benchmark** (`python/benchmarking.py`)
+  > *"Compare Python brute force, MariaDB exact search and MariaDB indexed search: mean and median
+  > latency, speedup, recall@5, and a Matplotlib chart."*
+
+  Produced the three search paths, the repeated timing loop and `docs/benchmark_latency.png`. Measured
+  medians: Python brute force 1.5 ms, MariaDB exact 235 ms, MariaDB indexed 2.5 ms.
+
+  **Dinu: search page** (`python/query_ui.py`)
+  > *"Create a UI for searching the articles with MariaDB vector search."*
+
+  Produced the Streamlit page: a question box, the filters, and the retrieved passages with their
+  articles. We tested it on the loaded corpus (screenshots above).
 
 
 ## Team
