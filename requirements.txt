@@ -1,5 +1,5 @@
 # Exact versions we tested with (Python 3.13). Newer versions may work, but these are known to work.
-# NOTE: PyTorch has no pip package for macOS (Intel or Apple Silicon). Install it with conda first,
+# NOTE: PyTorch has no pip package for Intel Macs. Install it with conda first,
 # then install the rest without the torch line:
 #   conda install pytorch -c pytorch
 #   grep -v '^torch' requirements.txt | pip install -r /dev/stdin
