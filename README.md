@@ -472,7 +472,53 @@ that stays in sync with the articles.
 - **Every finding is a test.** The cascade bug, the collation, the filter behaviour and the default plan
   are checked by `pytest` (with the corpus loaded: all tests pass).
 - **AI use:** we used AI assistants (Claude) for code, tests and reviews; every result was run and checked
-  on our machines. The detailed record (tools, prompts, what they produced) is in the team document.
+  on our machines. Representative examples of prompts and what they produced:
+
+  **Schema — storing vectors in MariaDB**
+  > *"How should I store text embeddings in MariaDB 11.8? I want to use the native VECTOR type with a cosine distance index."*
+
+  Produced the core of `sql/init/01_vector_schema.sql`:
+  ```sql
+  embedding  VECTOR(384)  NOT NULL,
+  VECTOR INDEX idx_chunks_embedding (embedding) M=8 DISTANCE=cosine
+  ```
+  Also explained that `DISTANCE=cosine` must be written explicitly — the default is euclidean.
+
+  **Cascade delete breaks the vector index**
+  > *"After deleting an article the vector search returns almost no results. Direct DELETE works fine but ON DELETE CASCADE breaks it. Is this a known MariaDB issue?"*
+
+  Confirmed it is a bug in MariaDB 11.8. Produced `test_known_bug_cascade_breaks_vector_index` in `tests/test_schema.py` and the fix: delete chunks manually before the parent row, no `ON DELETE CASCADE` on `chunks`.
+
+  **Optimizer chooses the wrong plan with filters**
+  > *"My hybrid search is 70× slower when I add a category filter. EXPLAIN shows the optimizer starts from the word_count index instead of the vector index. How do I fix this?"*
+
+  Explained the optimizer underestimates chunk count per article (`rows 1` in `EXPLAIN`). Produced `FORCE INDEX (idx_chunks_embedding)` as the fix, now the default in `search.py`:
+  ```python
+  "index": f"FORCE INDEX ({INDEX_NAME})",
+  ```
+
+  **Chunk size for retrieval**
+  > *"What chunk size and overlap work well for retrieval with bge-small-en-v1.5?"*
+
+  Recommended 150–200 words with 20–30 word overlap. We went with the values now in `fetch.py`:
+  ```python
+  CHUNK_TARGET = 175   # words per chunk (aim for 150-200)
+  CHUNK_OVERLAP = 30   # words shared between consecutive chunks
+  ```
+
+  **BGE query instruction**
+  > *"Does bge-small-en-v1.5 have a recommended query instruction for retrieval tasks?"*
+
+  Pointed to the official BGE docs. Produced `embed_query()` in `embed.py`:
+  ```python
+  QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+  ```
+  We measured the effect: hit@5 improved from 0.86 → 0.91, hit@1 from 0.45 → 0.55.
+
+  **Regression test for the cascade bug**
+  > *"Write a pytest test that checks the vector index is not broken after a cascade delete."*
+
+  Produced the test skeleton for `test_known_bug_cascade_breaks_vector_index`: creates two tables (one with cascade, one without), deletes via each path, asserts the index returns the expected number of rows via `ORDER BY VEC_DISTANCE_COSINE ... LIMIT`.
 
 ## Team
 
