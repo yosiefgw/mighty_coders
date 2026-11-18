@@ -127,6 +127,7 @@ Why it looks like this:
 | Index | HNSW, `M=8` | see Data model; `ef_search` left at the default 20 (no difference measured) |
 | Search plan | vector index forced by default (`mode="index"`) | the optimizer chose the 7–70× slower exact plan with filters, same results |
 | Query text | bge query instruction in front of questions (`embed_query()` in `embed.py`; chunks are embedded without it) | measured: hit@5 0.86 → 0.91, hit@1 0.45 → 0.55 |
+| RAG model | `claude-haiku-4-5-20251001`, 512 max tokens | fast and cheap for short factual answers; context fits within one prompt |
 
 Chunking in practice: the last chunk of each article holds the remaining words, so it can be shorter:
 144 of 3,753 chunks (3.8%) are under 150 words (minimum 32). Average chunk length: 172 words.
@@ -278,6 +279,15 @@ category can be browsed directly. The time shown on the page includes turning th
 ![Search for "Which planet has the hottest surface?" in the category "Planets of the Solar System"](docs/ui_result.png)
 
 ![The matching passage for Venus: "...making it the hottest planet in the solar system"](docs/ui_passage.png)
+
+Example questions and the top result each returns (measured on the full corpus, 166 articles):
+
+| Question | Top result | Distance |
+|---|---|---|
+| Which planet has a giant storm called the Great Red Spot? | Jupiter | 0.267 |
+| Which moon of Jupiter is the most volcanically active body in the Solar System? | Io (moon) | 0.214 |
+| Which planet has a runaway greenhouse effect and a surface hot enough to melt lead? | Planetary habitability in the Solar System | 0.244 |
+| What distant spherical shell of icy bodies is thought to be the source of long-period comets? | Comet | 0.250 |
 
 From Python, the same search:
 
@@ -461,8 +471,72 @@ that stays in sync with the articles.
   of two MediaWiki API limits (one extract and no `rvlimit` per multi-page request).
 - **Every finding is a test.** The cascade bug, the collation, the filter behaviour and the default plan
   are checked by `pytest` (with the corpus loaded: all tests pass).
-- **AI use:** we used AI assistants (Claude) for code, tests and reviews; every result was run and checked
-  on our machines. The detailed record (tools, prompts, what they produced) is in the team document.
+- **AI use:** we used AI assistants (Claude and ChatGPT) for code, tests and reviews; every result was run and checked
+  on our machines. Representative examples of prompts (paraphrased) and what they produced:
+
+  **Yosief: schema** (`sql/init/01_vector_schema.sql`)
+  > *"Write the schema file with comments: revision_id, no CASCADE, and links to the MariaDB docs."*
+
+  Produced the five tables with `embedding VECTOR(384) NOT NULL` and
+  `VECTOR INDEX idx_chunks_embedding (embedding) M=8 DISTANCE=cosine`, and noted that `DISTANCE=cosine`
+  must be written (the default is euclidean). Our tests then found the Titan/TITAN duplicate title, so
+  titles got `COLLATE utf8mb4_bin`.
+
+  **Yosief: hybrid search** (`python/search.py`)
+  > *"Build the search function with VEC_DISTANCE and the filters, in one SQL statement."*
+
+  Produced `build_query()` / `search()` with three modes (`auto`, `index`, `exact`) and tests. Our timing
+  runs then showed the optimizer picks the 7–70× slower exact plan when a filter is added, so
+  `FORCE INDEX` became the default:
+  ```python
+  "index": f"FORCE INDEX ({INDEX_NAME})",
+  ```
+
+  **Yosief: schema tests and the cascade bug** (`tests/test_schema.py`)
+  > *"Write tests for the schema, including deleting an article together with its chunks."*
+
+  Produced the schema tests. Running them showed the bug: after an `ON DELETE CASCADE` the index found
+  only 0–1 of 15 remaining rows, while a direct `DELETE` worked. We kept it as
+  `test_known_bug_cascade_breaks_vector_index` (one table with cascade, one without) and removed the
+  cascade from `chunks`.
+
+  **Yosief: evaluation** (`python/evaluate.py`)
+  > *"Write the evaluation: ground-truth questions, hit@k, MRR, and index recall against exact search."*
+
+  Produced `evaluate.py` and its tests; we wrote and checked the 44 questions against the articles.
+  Result: hit@5 0.86, index recall 1.000.
+
+  **Timofey: chunk size** (`python/fetch.py`)
+  > *"What chunk size and overlap work well for retrieval with bge-small-en-v1.5?"*
+
+  Recommended 150–200 words with 20–30 word overlap. We went with the values now in `fetch.py`:
+  ```python
+  CHUNK_TARGET = 175   # words per chunk (aim for 150-200)
+  CHUNK_OVERLAP = 30   # words shared between consecutive chunks
+  ```
+
+  **Timofey: BGE query instruction** (`python/embed.py`)
+  > *"Does bge-small-en-v1.5 have a recommended query instruction for retrieval tasks?"*
+
+  Pointed to the official BGE docs. Produced `embed_query()` in `embed.py`:
+  ```python
+  QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+  ```
+  We measured the effect: hit@5 improved from 0.86 → 0.91, hit@1 from 0.45 → 0.55.
+
+  **Dinu: benchmark** (`python/benchmarking.py`)
+  > *"Compare Python brute force, MariaDB exact search and MariaDB indexed search: mean and median
+  > latency, speedup, recall@5, and a Matplotlib chart."*
+
+  Produced the three search paths, the repeated timing loop and `docs/benchmark_latency.png`. Measured
+  medians: Python brute force 1.5 ms, MariaDB exact 235 ms, MariaDB indexed 2.5 ms.
+
+  **Dinu: search page** (`python/query_ui.py`)
+  > *"Create a UI for searching the articles with MariaDB vector search."*
+
+  Produced the Streamlit page: a question box, the filters, and the retrieved passages with their
+  articles. We tested it on the loaded corpus (screenshots above).
+
 
 ## Team
 
