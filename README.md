@@ -472,7 +472,7 @@ that stays in sync with the articles.
 - **Every finding is a test.** The cascade bug, the collation, the filter behaviour and the default plan
   are checked by `pytest` (with the corpus loaded: all tests pass).
 - **AI use:** we used AI assistants (Claude) for code, tests and reviews; every result was run and checked
-  on our machines. Representative examples of prompts and what they produced:
+  on our machines. Representative examples of prompts (paraphrased) and what they produced:
 
   **Schema — storing vectors in MariaDB**
   > *"How should I store text embeddings in MariaDB 11.8? I want to use the native VECTOR type with a cosine distance index."*
