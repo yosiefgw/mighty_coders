@@ -1,11 +1,14 @@
 # Exact versions we tested with (Python 3.13). Newer versions may work, but these are known to work.
+# NOTE: torch is not available via pip on macOS x86_64. Install it separately:
+#   conda install pytorch==2.10.0 -c pytorch   (Intel Mac)
+#   pip install torch==2.10.0                   (Apple Silicon / Linux)
 pymysql==1.2.3
 pytest==9.1.1
 matplotlib==3.11.2
-numpy==2.5.4
-sentence-transformers==6.2.0
-transformers==5.22.1
-torch==2.15.0
-anthropic==2.4.0
-requests==2.34.2
+numpy==2.3.5
+sentence-transformers==5.3.0
+transformers==5.3.0
+torch==2.10.0
+anthropic==0.84.0
+requests==2.32.5
 streamlit==1.66.1
