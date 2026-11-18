@@ -153,11 +153,10 @@ def load_article_content(article_id):
 
 st.set_page_config(
     page_title="Solar System Explorer",
-    page_icon="🪐",
     layout="wide",
 )
 
-st.title("🪐 Solar System Explorer")
+st.title("Solar System Explorer")
 
 st.write(
     "Explore the Solar System Wikipedia knowledge base using "
@@ -257,7 +256,7 @@ edited_since_value = (
 # ---------------------------------------------------------
 
 search_clicked = st.button(
-    "🔍 Search",
+    "Search",
     type="primary",
 )
 

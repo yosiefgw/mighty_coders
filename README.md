@@ -280,6 +280,15 @@ category can be browsed directly. The time shown on the page includes turning th
 
 ![The matching passage for Venus: "...making it the hottest planet in the solar system"](docs/ui_passage.png)
 
+Example questions and the top result each returns (measured on the full corpus, 166 articles):
+
+| Question | Top result | Distance |
+|---|---|---|
+| Which planet has a giant storm called the Great Red Spot? | Jupiter | 0.267 |
+| Which moon of Jupiter is the most volcanically active body in the Solar System? | Io (moon) | 0.214 |
+| Which planet has a runaway greenhouse effect and a surface hot enough to melt lead? | Planetary habitability in the Solar System | 0.244 |
+| What distant spherical shell of icy bodies is thought to be the source of long-period comets? | Comet | 0.250 |
+
 From Python, the same search:
 
 ```bash
