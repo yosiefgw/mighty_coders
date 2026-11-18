@@ -471,33 +471,42 @@ that stays in sync with the articles.
   of two MediaWiki API limits (one extract and no `rvlimit` per multi-page request).
 - **Every finding is a test.** The cascade bug, the collation, the filter behaviour and the default plan
   are checked by `pytest` (with the corpus loaded: all tests pass).
-- **AI use:** we used AI assistants (Claude) for code, tests and reviews; every result was run and checked
+- **AI use:** we used AI assistants (Claude and ChatGPT) for code, tests and reviews; every result was run and checked
   on our machines. Representative examples of prompts (paraphrased) and what they produced:
 
-  **Schema — storing vectors in MariaDB**
-  > *"How should I store text embeddings in MariaDB 11.8? I want to use the native VECTOR type with a cosine distance index."*
+  **Yosief: schema** (`sql/init/01_vector_schema.sql`)
+  > *"Write the schema file with comments: revision_id, no CASCADE, and links to the MariaDB docs."*
 
-  Produced the core of `sql/init/01_vector_schema.sql`:
-  ```sql
-  embedding  VECTOR(384)  NOT NULL,
-  VECTOR INDEX idx_chunks_embedding (embedding) M=8 DISTANCE=cosine
-  ```
-  Also explained that `DISTANCE=cosine` must be written explicitly — the default is euclidean.
+  Produced the five tables with `embedding VECTOR(384) NOT NULL` and
+  `VECTOR INDEX idx_chunks_embedding (embedding) M=8 DISTANCE=cosine`, and noted that `DISTANCE=cosine`
+  must be written (the default is euclidean). Our tests then found the Titan/TITAN duplicate title, so
+  titles got `COLLATE utf8mb4_bin`.
 
-  **Regression test for the cascade / vector index bug**
-  > *"Write a pytest test that checks the vector index is not broken after a cascade delete."*
+  **Yosief: hybrid search** (`python/search.py`)
+  > *"Build the search function with VEC_DISTANCE and the filters, in one SQL statement."*
 
-  We found this bug ourselves by testing (the index returned 0–1 results after a cascade delete). AI produced `test_known_bug_cascade_breaks_vector_index` in `tests/test_schema.py`: creates two tables (one with cascade, one without), deletes via each path, asserts the index returns the expected number of rows.
-
-  **Optimizer chooses the wrong plan with filters**
-  > *"My hybrid search is 70× slower when I add a category filter. EXPLAIN shows the optimizer starts from the word_count index instead of the vector index. How do I fix this?"*
-
-  Explained the optimizer underestimates chunk count per article (`rows 1` in `EXPLAIN`). Produced `FORCE INDEX (idx_chunks_embedding)` as the fix, now the default in `search.py`:
+  Produced `build_query()` / `search()` with three modes (`auto`, `index`, `exact`) and tests. Our timing
+  runs then showed the optimizer picks the 7–70× slower exact plan when a filter is added, so
+  `FORCE INDEX` became the default:
   ```python
   "index": f"FORCE INDEX ({INDEX_NAME})",
   ```
 
-  **Chunk size for retrieval**
+  **Yosief: schema tests and the cascade bug** (`tests/test_schema.py`)
+  > *"Write tests for the schema, including deleting an article together with its chunks."*
+
+  Produced the schema tests. Running them showed the bug: after an `ON DELETE CASCADE` the index found
+  only 0–1 of 15 remaining rows, while a direct `DELETE` worked. We kept it as
+  `test_known_bug_cascade_breaks_vector_index` (one table with cascade, one without) and removed the
+  cascade from `chunks`.
+
+  **Yosief: evaluation** (`python/evaluate.py`)
+  > *"Write the evaluation: ground-truth questions, hit@k, MRR, and index recall against exact search."*
+
+  Produced `evaluate.py` and its tests; we wrote and checked the 44 questions against the articles.
+  Result: hit@5 0.86, index recall 1.000.
+
+  **Timofey: chunk size** (`python/fetch.py`)
   > *"What chunk size and overlap work well for retrieval with bge-small-en-v1.5?"*
 
   Recommended 150–200 words with 20–30 word overlap. We went with the values now in `fetch.py`:
@@ -506,7 +515,7 @@ that stays in sync with the articles.
   CHUNK_OVERLAP = 30   # words shared between consecutive chunks
   ```
 
-  **BGE query instruction**
+  **Timofey: BGE query instruction** (`python/embed.py`)
   > *"Does bge-small-en-v1.5 have a recommended query instruction for retrieval tasks?"*
 
   Pointed to the official BGE docs. Produced `embed_query()` in `embed.py`:
@@ -514,6 +523,19 @@ that stays in sync with the articles.
   QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
   ```
   We measured the effect: hit@5 improved from 0.86 → 0.91, hit@1 from 0.45 → 0.55.
+
+  **Dinu: benchmark** (`python/benchmarking.py`)
+  > *"Compare Python brute force, MariaDB exact search and MariaDB indexed search: mean and median
+  > latency, speedup, recall@5, and a Matplotlib chart."*
+
+  Produced the three search paths, the repeated timing loop and `docs/benchmark_latency.png`. Measured
+  medians: Python brute force 1.5 ms, MariaDB exact 235 ms, MariaDB indexed 2.5 ms.
+
+  **Dinu: search page** (`python/query_ui.py`)
+  > *"Create a UI for searching the articles with MariaDB vector search."*
+
+  Produced the Streamlit page: a question box, the filters, and the retrieved passages with their
+  articles. We tested it on the loaded corpus (screenshots above).
 
 
 ## Team
