@@ -484,10 +484,10 @@ that stays in sync with the articles.
   ```
   Also explained that `DISTANCE=cosine` must be written explicitly — the default is euclidean.
 
-  **Cascade delete breaks the vector index**
-  > *"After deleting an article the vector search returns almost no results. Direct DELETE works fine but ON DELETE CASCADE breaks it. Is this a known MariaDB issue?"*
+  **Regression test for the cascade / vector index bug**
+  > *"Write a pytest test that checks the vector index is not broken after a cascade delete."*
 
-  Confirmed it is a bug in MariaDB 11.8. Produced `test_known_bug_cascade_breaks_vector_index` in `tests/test_schema.py` and the fix: delete chunks manually before the parent row, no `ON DELETE CASCADE` on `chunks`.
+  We found this bug ourselves by testing (the index returned 0–1 results after a cascade delete). AI produced `test_known_bug_cascade_breaks_vector_index` in `tests/test_schema.py`: creates two tables (one with cascade, one without), deletes via each path, asserts the index returns the expected number of rows.
 
   **Optimizer chooses the wrong plan with filters**
   > *"My hybrid search is 70× slower when I add a category filter. EXPLAIN shows the optimizer starts from the word_count index instead of the vector index. How do I fix this?"*
@@ -515,10 +515,6 @@ that stays in sync with the articles.
   ```
   We measured the effect: hit@5 improved from 0.86 → 0.91, hit@1 from 0.45 → 0.55.
 
-  **Regression test for the cascade bug**
-  > *"Write a pytest test that checks the vector index is not broken after a cascade delete."*
-
-  Produced the test skeleton for `test_known_bug_cascade_breaks_vector_index`: creates two tables (one with cascade, one without), deletes via each path, asserts the index returns the expected number of rows via `ORDER BY VEC_DISTANCE_COSINE ... LIMIT`.
 
 ## Team
 
