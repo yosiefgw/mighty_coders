@@ -258,3 +258,44 @@ def test_build_chunks_multiple_articles():
 
     ids = {c["article_id"] for c in chunks}
     assert ids == {1, 2}
+
+
+# ---------------------------------------------------------------------------
+# edge cases
+# ---------------------------------------------------------------------------
+
+def test_chunk_text_whitespace_only():
+    """Whitespace-only string has no words, so returns empty list."""
+    assert chunk_text("     ") == []
+
+
+def test_chunk_text_single_word():
+    result = chunk_text("Jupiter")
+    assert result == ["Jupiter"]
+
+
+def test_collect_titles_empty_category():
+    """Category with no pages and no subcategories returns an empty list."""
+    def fake_get(params):
+        return {"query": {"categorymembers": []}}
+
+    with patch("fetch._get", side_effect=fake_get):
+        titles = collect_titles("EmptyCategory", depth=1)
+
+    assert titles == []
+
+
+def test_fetch_batch_api_error_raises():
+    """MediaWiki API error object should raise RuntimeError."""
+    import pytest
+    error_response = {"error": {"code": "invalidtitle", "info": "Bad title."}, "query": {"pages": []}}
+    with patch("fetch._get", return_value=error_response):
+        with pytest.raises(RuntimeError):
+            _fetch_batch(["Bad Title!!"])
+
+
+def test_build_chunks_no_articles():
+    """Empty article list should return empty chunks list."""
+    with patch("fetch.embed_batch", side_effect=_fake_embed_batch):
+        chunks = build_chunks([])
+    assert chunks == []
