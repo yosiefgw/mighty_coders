@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 from embed import EMBEDDING_DIM, embed, embed_batch, embed_query  # noqa: E402
-from rag import _build_prompt, _retrieve, answer     # noqa: E402
+from rag import _build_prompt, _retrieve, answer, retrieve     # noqa: E402
 
 # Fake Wikipedia page id far from real ones so it never collides.
 TEST_ARTICLE_ID = 4_294_960_001
@@ -264,3 +264,42 @@ def test_answer_uses_llm_reply(conn):
         result = answer("What is Jupiter made of?", top_k=1, conn=conn)
 
     assert result["answer"] == expected_reply
+
+
+# ---------------------------------------------------------------------------
+# edge cases
+# ---------------------------------------------------------------------------
+
+def test_build_prompt_empty_chunks():
+    """_build_prompt with no chunks should still include the question."""
+    prompt = _build_prompt("What is Mars?", [])
+    assert "What is Mars?" in prompt
+
+
+def test_build_prompt_empty_question():
+    """_build_prompt with an empty question should not raise."""
+    chunks = [{"article_title": "Jupiter", "chunk_text": "Jupiter is a gas giant."}]
+    prompt = _build_prompt("", chunks)
+    assert "Jupiter is a gas giant." in prompt
+
+
+def test_answer_raises_without_api_key(conn):
+    """answer() must raise KeyError when ANTHROPIC_API_KEY is not set."""
+    env_without_key = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+    with patch.dict(os.environ, env_without_key, clear=True):
+        with pytest.raises(KeyError):
+            answer("What is Jupiter made of?", top_k=1, conn=conn)
+
+
+@pytest.mark.requires_torch
+def test_retrieve_empty_question_returns_list(conn):
+    """retrieve() with an empty string should not raise and return a list."""
+    results = retrieve("", top_k=5, conn=conn)
+    assert isinstance(results, list)
+
+
+@pytest.mark.requires_torch
+def test_retrieve_top_k_zero_returns_empty(conn):
+    """retrieve() with top_k=0 should return an empty list."""
+    results = retrieve("What is Jupiter?", top_k=0, conn=conn)
+    assert results == []
