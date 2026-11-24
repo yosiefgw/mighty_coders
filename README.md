@@ -543,3 +543,7 @@ that stays in sync with the articles.
 - Yosief Gebrewahid Kidane ([@yosiefgw](https://github.com/yosiefgw)): schema, hybrid search, loader, SQL examples, ground truth and evaluation
 - Timofey Stukalin ([@tstukalin1](https://github.com/tstukalin1)): download, chunking and embedding, RAG
 - Dinu Panackal Devassia ([@DinuPD](https://github.com/DinuPD)): benchmarking, web page, ef_search / cache experiment
+
+## License
+
+The code is under the [MIT License](LICENSE). The Wikipedia text in `data/` is not part of it: it keeps its own licence, CC BY-SA 4.0 (see [data/README.md](data/README.md)).
