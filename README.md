@@ -239,7 +239,8 @@ pytest -q
 ```
 
 With an empty database a few tests are skipped, because they need the loaded articles. After loading
-the data (below), all of them run.
+the data (below) we get `136 passed, 6 skipped`: only the 6 tests of the synthetic cache experiment still skip: they need its
+100,000-vector table and a 1 GB vector cache (see [Vector index cache](#vector-index-cache-and-ef_search-synthetic)).
 
 ### Load the data and use it
 
@@ -454,6 +455,7 @@ that stays in sync with the articles.
 - `data/`: dataset instructions (downloaded files are not committed)
 - `docs/`: results, charts and screenshots for this README
 - `CONTRIBUTING.md`: how we work (branches, pull requests, reviews)
+- `LICENSE`: MIT licence for the code
 
 ## How it was made
 
@@ -470,7 +472,7 @@ that stays in sync with the articles.
   questions skipped too eagerly in the evaluation, and a downloader that fetched no text at all because
   of two MediaWiki API limits (one extract and no `rvlimit` per multi-page request).
 - **Every finding is a test.** The cascade bug, the collation, the filter behaviour and the default plan
-  are checked by `pytest` (with the corpus loaded: all tests pass).
+  are checked by `pytest` (with the corpus loaded: 136 passed, 6 skipped, none failed).
 - **AI use:** we used AI assistants (Claude and ChatGPT) for code, tests and reviews; every result was run and checked
   on our machines. Representative examples of prompts (paraphrased) and what they produced:
 
