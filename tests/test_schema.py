@@ -57,11 +57,17 @@ def test_all_tables_exist(conn):
 
 
 def test_vector_index_definition(conn):
+    """Check the parts that matter, not the exact text: MariaDB 11.8.6 prints the options
+    as M=8 DISTANCE=cosine, 11.8.9 as `M`='8' `DISTANCE`='cosine' (the same index)."""
     cur = conn.cursor()
     cur.execute("SHOW CREATE TABLE chunks")
     ddl = cur.fetchone()[1]
     assert "`embedding` vector(384) NOT NULL" in ddl
-    assert "VECTOR KEY `idx_chunks_embedding` (`embedding`) `M`='8' `DISTANCE`='cosine'" in ddl
+    line = next(l for l in ddl.splitlines() if "idx_chunks_embedding" in l)
+    plain = line.replace("`", "").replace("'", "").strip().rstrip(",")
+    assert plain.startswith("VECTOR KEY idx_chunks_embedding (embedding)")
+    assert "M=8" in plain.split()
+    assert "DISTANCE=cosine" in plain.split()
 
 
 def test_chunks_foreign_key_has_no_cascade(conn):
